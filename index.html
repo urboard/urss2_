@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SS2 Flow Board</title>
+<meta name="description" content="SS2 Flow Board — clinic room & queue management.">
+<meta name="theme-color" content="#1f4e5f">
+<!-- Icons / favicons -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<!-- PWA / install-to-homescreen -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SS2 Flow Board">
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{--bg:#f4f6f7;--card:#ffffff;--ink:#1f2d33;--muted:#6b7c85;--line:#dbe3e6;--head:#1f4e5f;--accent:#2e7d8a;--free:#e6f4ea;--free-b:#9cc4a8;--occ:#fff5e9;--occ-b:#f0c79a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:15px}
+  header{position:sticky;top:0;z-index:20;background:var(--head);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  .logo{height:30px;width:auto;border-radius:6px;background:#fff;padding:2px}
+  #clock{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.14);padding:3px 10px;border-radius:6px}
+  .syncst{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,.16)}
+  .syncst.cloud{background:#2e7d32}.syncst.err{background:#b9534f}
+  .rolechip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.22);cursor:pointer}
+  .rolechip:hover{background:rgba(255,255,255,.35)}
+  .spacer{flex:1}
+  header button{background:#fff;color:var(--head);border:0;border-radius:7px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer}
+  header button[disabled]{opacity:.45;cursor:default}
+  header button:hover{background:#e9f0f1}
+  header button.ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
+  .menu-wrap{position:relative;display:inline-block}
+  .menu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.2);padding:6px;min-width:190px;display:none;flex-direction:column;gap:2px;z-index:40}
+  .menu.show{display:flex}
+  .menu button{background:none;border:0;color:var(--ink);text-align:left;padding:8px 10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;width:100%}
+  .menu button:hover{background:#eef3f4}
+  .menu button.danger{color:#c0392b}.menu button.danger:hover{background:#f7e4e2}
+  .menu-sep{height:1px;background:var(--line);margin:4px 2px}
+  main{padding:16px;max-width:1500px;margin:0 auto}
+  .arrive-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:16px}
+  .arrive-bar strong{color:var(--head)}
+  input,select{font-family:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:7px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:14px}
+  .btn:hover{filter:brightness(1.07)}
+  .btn.sm{padding:5px 9px;font-size:13px}.btn.grey{background:#e3e9eb;color:var(--ink)}.btn.red{background:#d9534f}
+  .layout{display:grid;grid-template-columns:1fr 372px;gap:16px;align-items:start}
+  @media(max-width:1050px){.layout{grid-template-columns:1fr}}
+  .rightcol{position:sticky;top:64px;display:flex;flex-direction:column;gap:14px;max-height:calc(100vh - 80px);overflow:auto}
+  .section-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:6px 2px 10px}
+  .group-title{font-size:15px;font-weight:800;color:var(--head);margin:18px 2px 8px;border-bottom:2px solid var(--line);padding-bottom:4px}
+  .group-title:first-child{margin-top:0}
+  .rooms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .room{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:120px}
+  .room .rhead{display:flex;justify-content:space-between;align-items:center;padding:8px 11px;font-weight:700}
+  .room.free .rhead{background:var(--free);border-bottom:1px solid var(--free-b)}
+  .room.occ .rhead{background:var(--occ);border-bottom:1px solid var(--occ-b)}
+  .room.maskSoon{border-color:#f5c542;box-shadow:0 0 0 3px #ffe082}
+  .room.maskSoon .rhead{background:#fff3c4;border-bottom-color:#f5c542}
+  .room.maskOver{border-color:#e57373;box-shadow:0 0 0 3px #ef9a9a;animation:pulse 1.4s infinite}
+  .room.maskOver .rhead{background:#ffd9d9;border-bottom-color:#e57373}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px #ef9a9a}50%{box-shadow:0 0 0 6px #ef9a9a}}
+  .room .rname{font-size:16px}
+  .room .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+  .room.free .pill{background:#cfe9d6;color:#256b39}.room.occ .pill{background:#f6d8b3;color:#8a5212}.room.maskOver .pill{background:#e57373;color:#fff}
+  .room.hasnext{border-color:#9cc0e0}.room.hasnext .pill{background:#cfe2f5;color:#1565c0}
+  .nextbanner{background:#eaf3fb;border:1px dashed #9cc0e0;color:#1565c0;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:700;margin-bottom:5px}
+  .room.noThera{border-color:#c89be8}
+  .noTheraBanner{background:#f3e8fd;border:1px solid #d6b3f0;color:#7b2cbf;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;margin-bottom:5px}
+  .tag.warn{background:#f3e8fd;color:#7b2cbf}
+  .timein{font-family:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+  .room .body{padding:10px 11px;display:flex;flex-direction:column;gap:7px;flex:1}
+  .cust{font-size:17px;font-weight:700;line-height:1.15}
+  .fieldrow{display:flex;align-items:flex-start;gap:6px;font-size:13px}
+  .fieldrow label{width:54px;color:var(--muted);flex:none;padding-top:6px}
+  .fieldrow select,.fieldrow .note-in{flex:1;min-width:0}
+  .docline{font-weight:700;color:var(--head);font-size:13px}
+  .docedit{background:none;border:0;cursor:pointer;color:var(--muted);font-size:13px;padding:0 4px;border-radius:4px}
+  .docedit:hover{background:#eef3f4;color:var(--accent)}
+  .mask b{font-variant-numeric:tabular-nums}
+  .rel{font-size:12px;color:var(--muted);margin-left:4px}.rel.over{color:#c0392b;font-weight:700}.rel.soon{color:#b8860b;font-weight:700}
+  .maskbtns{display:flex;gap:5px;flex-wrap:nowrap;align-items:center}
+  .maskbtns .hint{white-space:nowrap;flex:none;font-size:13px;color:var(--muted)}.maskbtns .chip{padding:3px 7px}
+  .maskrow{flex-wrap:wrap;align-items:center;row-gap:3px}
+  .maskrow label{padding-top:0}
+  .maskrow .hint{white-space:nowrap;flex:none;font-size:13px;color:var(--muted)}
+  .maskrow .chip{padding:3px 7px}
+  .maskrow .timein{width:84px}
+  .maskrow .maskbreak{flex-basis:100%;height:0}
+  .maskrow .mhidden{visibility:hidden;flex:none;white-space:nowrap}
+  .maskbtns .timein{width:84px}
+  .chip{background:#eef3f4;border:1px solid var(--line);border-radius:14px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink)}
+  .chip:hover{background:#d8e6e8}.chip.x{color:#c0392b}
+  .chip.go{background:#2e7d8a;color:#fff;border-color:#2e7d8a}
+  .maskx{background:none;border:0;cursor:pointer;color:var(--muted);font-size:12px;line-height:1;padding:0 3px;margin-left:2px;border-radius:4px;opacity:.6}
+  .maskx:hover{opacity:1;color:#c0392b;background:#f7e4e2}
+  .mstep{display:inline-flex;flex-direction:column;margin:0 5px;vertical-align:middle;line-height:0}
+  .mstep button{background:none;border:0;cursor:pointer;color:var(--muted);font-size:9px;line-height:.9;padding:0 2px}
+  .mstep button:hover{color:var(--accent)}
+  .txwrap{display:flex;flex-wrap:wrap;gap:4px;align-items:center;flex:1}
+  .txchip{display:inline-flex;align-items:center;gap:5px;background:#e3eef0;border:1px solid #cfe0e3;border-radius:12px;padding:2px 4px 2px 9px;font-size:12px;font-weight:600}
+  .txchip b{cursor:pointer;color:#c0392b}
+  .txname{cursor:pointer}
+  .txchip.done{background:#e6f4ea;border-color:#9cc4a8;color:#256b39;text-decoration:line-through}
+  .txin{flex:1;min-width:80px;font-size:13px;padding:5px 7px}
+  .note-in{font-size:13px}
+  .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+  .actions select{flex:1;min-width:90px}
+  .freebody{padding:11px;display:flex;flex-direction:column;gap:8px;justify-content:center;flex:1}
+  .freebody select{width:100%}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .tag{display:inline-block;background:#e6f4ea;color:#256b39;border-radius:12px;padding:2px 9px;margin:2px 3px 2px 0;font-weight:700;font-size:12px}
+  .tag.busy{background:#fdeede;color:#8a5212}
+  .witem{border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:7px;background:#fbfdfd;display:flex;flex-direction:column;gap:5px}
+  .witem.wmed{background:#fff8e1;border-color:#f0d48a}.witem.wlong{background:#fdeaea;border-color:#e9a3a3}
+  .witem .wtop{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+  .wmin{font-weight:800;font-variant-numeric:tabular-nums}
+  .witem.wlong .wmin{color:#c0392b}.witem.wmed .wmin{color:#b8860b}
+  .queue{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .qitem{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;background:#fbfdfd}
+  .qtop{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+  .qtime{font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;flex:none}
+  .qname{font-weight:700;font-size:15px;flex:1}
+  .qactions{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .qactions select{flex:1;min-width:60px}
+  .empty{color:var(--muted);font-style:italic;padding:8px 2px;font-size:13px}
+  .filterbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px}
+  .filterbar label{display:flex;align-items:center;gap:5px;color:var(--ink);font-weight:700;cursor:pointer}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:50;align-items:center;justify-content:center;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:12px;max-width:640px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+  .modal h2{margin:0;padding:14px 18px;background:var(--head);color:#fff;font-size:17px;display:flex;justify-content:space-between;align-items:center}
+  .modal h2 span{cursor:pointer}
+  .modal .mbody{padding:16px 18px;overflow:auto}
+  .modal .mfoot{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+  .tlog-th{font-weight:800;color:var(--head);margin:12px 0 4px;font-size:15px}.tlog-th:first-child{margin-top:0}
+  .tlog-item{font-size:13px;margin:2px 0 2px 6px}.tlog-item .now{color:#256b39;font-weight:700}.tlog-item .done{color:var(--muted)}
+  .rec-item{font-size:13px;margin:2px 0 2px 6px}.rec-item.cx{color:#b9534f}
+  .settings textarea{width:100%;height:74px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:4px}
+  .settings .grp{margin-bottom:12px}.settings .grp label{font-weight:700;font-size:13px}
+  .hint{font-size:12px;color:var(--muted)}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2d33;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;opacity:0;transition:opacity .2s;z-index:99;pointer-events:none}
+  .toast.show{opacity:1}
+  /* ===== v2: Oxy step engine ===== */
+  .oxybox{background:#eef7f8;border:1px solid #bfe0e4;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:5px}
+  .oxybox.paused{background:#fff8e1;border-color:#f0d48a}
+  .oxyline{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--head);flex-wrap:wrap}
+  .oxydots{letter-spacing:2px;font-size:12px}
+  .oxydots .on{color:#2e7d8a}.oxydots .off{color:#c3d6d9}
+  .oxyrem{font-variant-numeric:tabular-nums}
+  .oxyrem.soon{color:#b8860b}.oxyrem.over{color:#c0392b}
+  .oxyctl{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  .oxyctl .chip{padding:3px 8px}
+  .oxyctl select{font-size:12px;padding:4px 6px}
+  /* ===== v2: stage ===== */
+  .stagesel{font-size:12px;padding:4px 6px}
+  .stagepill{display:inline-block;background:#e8eef9;color:#2c4a8a;border-radius:12px;padding:2px 9px;font-weight:700;font-size:12px}
+  /* ===== v2: phone (doctor / therapist) views ===== */
+  #phoneMain{max-width:560px}
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:10px;display:flex;flex-direction:column;gap:7px}
+  .pcard.alert{border-color:#e57373;box-shadow:0 0 0 3px #ffcdd2}
+  .pcard .ptop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .pcard .pname{font-size:17px;font-weight:800}
+  .pcard .proom{font-size:13px;font-weight:800;color:var(--accent);background:#e3eef0;border-radius:10px;padding:2px 9px;flex:none}
+  .pstatus{font-size:13px;font-weight:700;color:#2c4a8a;background:#e8eef9;border-radius:8px;padding:4px 8px}
+  .pstatus.mo{background:#ffd9d9;color:#b3261e}
+  .pmeta{font-size:12px;color:var(--muted)}
+  .notif{background:#1f4e5f;color:#fff;border-radius:10px;padding:10px 12px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;gap:8px;align-items:center;animation:nflash .8s 3}
+  @keyframes nflash{0%,100%{background:#1f4e5f}50%{background:#2e7d8a}}
+  .notif button{background:rgba(255,255,255,.2);border:0;color:#fff;border-radius:6px;padding:4px 9px;font-weight:700;cursor:pointer}
+  .rolebtns{display:flex;flex-direction:column;gap:8px}
+  .rolebtns button{padding:13px;font-size:15px;font-weight:800;border:1px solid var(--line);border-radius:9px;background:#fbfdfd;cursor:pointer;text-align:left}
+  .rolebtns button:hover{background:#e9f0f1;border-color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="logo.png" alt="" onerror="this.style.display='none'">
+  <h1>SS2 Flow Board</h1><span id="clock">--:--</span><span id="syncst" class="syncst">local</span>
+  <span class="rolechip" id="roleChip" style="display:none" onclick="openRoleSetup()" title="Tap to switch role/device">…</span>
+  <div class="spacer"></div>
+  <button id="undoBtn" class="adminOnly" onclick="undo()" title="Undo the last change (up to 5)" disabled>↶ Undo</button>
+  <button class="boardOnly" onclick="openTLog()">👥 By therapist</button>
+  <div class="menu-wrap boardOnly">
+    <button class="ghost" onclick="toggleMenu(event)">⋯ More</button>
+    <div class="menu" id="moreMenu" onclick="closeMenu()">
+      <button onclick="openRecords()">📒 Records</button>
+      <button class="counterOnly" onclick="openBackups()">🗂 Backups</button>
+      <button class="counterOnly" onclick="exportState()">⬇ Save to file</button>
+      <button class="counterOnly" onclick="document.getElementById('importer').click()">⬆ Load from file</button>
+      <button class="counterOnly" onclick="openSettings()">⚙ Edit lists</button>
+      <div class="menu-sep counterOnly"></div>
+      <button class="danger counterOnly" onclick="resetBoard()">↺ Reset board</button>
+      <button id="logoutBtn" style="display:none" onclick="doLogout()">⎋ Log out</button>
+    </div>
+  </div>
+  <button id="logoutBtnPhone" style="display:none" class="ghost" onclick="doLogout()">⎋</button>
+  <input type="file" id="importer" accept="application/json" style="display:none" onchange="importState(event)">
+</header>
+
+<!-- ===== Counter / Consultant board ===== -->
+<main id="boardMain" style="display:none">
+  <div class="arrive-bar">
+    <strong>Add / walk-in:</strong>
+    <input id="arriveName" list="custList" placeholder="Type or pick name…" style="min-width:200px">
+    <datalist id="custList"></datalist>
+    <select id="arriveDoc" title="Doctor" style="width:140px"></select>
+    <input id="arriveTime" class="timein" placeholder="time e.g. 345" style="width:120px">
+    <input id="arriveTx" list="txList" placeholder="Treatment" style="width:170px">
+    <button class="btn" onclick="arrive()">+ Add to queue</button>
+  </div>
+  <datalist id="txList"></datalist>
+  <div class="layout">
+    <div><div id="roomsHost"></div></div>
+    <div class="rightcol">
+      <div class="panel" id="theraPanel"></div>
+      <div class="panel" id="waitPanel"></div>
+      <div class="queue"><div class="section-title">Appointments (not yet arrived)</div><div id="queueHost"></div></div>
+    </div>
+  </div>
+</main>
+
+<!-- ===== Doctor / Therapist phone view ===== -->
+<main id="phoneMain" style="display:none">
+  <div id="notifHost"></div>
+  <div id="phoneHost"></div>
+</main>
+
+<div class="modal-bg" id="tlogModal"><div class="modal">
+  <h2>Customers by therapist <span onclick="closeModal('tlogModal')">✕</span></h2>
+  <div class="mbody" id="tlogBody"></div>
+  <div class="mfoot"><button class="btn grey counterOnly" onclick="clearLog()">Clear day's log</button><button class="btn grey" onclick="closeModal('tlogModal')">Close</button><button class="btn" onclick="copyTLog()">Copy</button></div>
+</div></div>
+<div class="modal-bg" id="recModal"><div class="modal">
+  <h2>Records — today <span onclick="closeModal('recModal')">✕</span></h2>
+  <div class="mbody" id="recBody"></div>
+  <div class="mfoot"><button class="btn grey counterOnly" onclick="clearRecords()">Clear records</button><button class="btn grey" onclick="closeModal('recModal')">Close</button></div>
+</div></div>
+<div class="modal-bg" id="backupModal"><div class="modal">
+  <h2>Local backups <span onclick="closeModal('backupModal')">✕</span></h2>
+  <div class="mbody"><p class="hint">Automatic local snapshots, taken every 10 minutes and before a reset/load. Restore one if the board ever empties out. These live in this browser only.</p><div id="backupBody"></div></div>
+  <div class="mfoot"><button class="btn grey" onclick="closeModal('backupModal')">Close</button></div>
+</div></div>
+<div class="modal-bg" id="settingsModal"><div class="modal">
+  <h2>Edit lists <span onclick="closeModal('settingsModal')">✕</span></h2>
+  <div class="mbody settings">
+    <p class="hint">One item per line. Customers: <code>NAME = Doctor = Therapist</code>.</p>
+    <div class="grp"><label>Downstairs rooms</label><textarea id="setDown"></textarea></div>
+    <div class="grp"><label>Upstairs rooms</label><textarea id="setUp"></textarea></div>
+    <div class="grp"><label>Doctors</label><textarea id="setDoctors"></textarea></div>
+    <div class="grp"><label>Therapists</label><textarea id="setTherapists"></textarea></div>
+    <div class="grp"><label>Treatments</label><textarea id="setTreatments"></textarea></div>
+    <div class="grp"><label>Customers &amp; fixed doctor/therapist</label><textarea id="setCustomers" style="height:140px"></textarea></div>
+  </div>
+  <div class="mfoot"><button class="btn grey" onclick="closeModal('settingsModal')">Cancel</button><button class="btn" onclick="saveSettings()">Save lists</button></div>
+</div></div>
+<div class="modal-bg" id="loginOverlay" style="background:rgba(31,78,95,.97)"><div class="modal" style="max-width:360px">
+  <h2>Sign in</h2>
+  <div class="mbody">
+    <p class="hint">Staff login for the SS2 Flow Board.</p>
+    <input id="loginEmail" type="text" autocomplete="username" placeholder="Username" style="width:100%;margin-bottom:8px">
+    <input id="loginPwd" type="password" autocomplete="current-password" placeholder="Password" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginErr" style="color:#c0392b;font-size:13px;margin-top:8px"></div>
+  </div>
+  <div class="mfoot"><button class="btn" onclick="doLogin()">Sign in</button></div>
+</div></div>
+<div class="modal-bg" id="roleOverlay" style="background:rgba(31,78,95,.97)"><div class="modal" style="max-width:380px">
+  <h2>Who is using this device?</h2>
+  <div class="mbody">
+    <div class="rolebtns" id="rolePick">
+      <button onclick="pickRole('counter')">🖥 Counter PC <span class="hint">full board + admin</span></button>
+      <button onclick="pickRole('consultant')">🧭 Consultant <span class="hint">full board, no admin</span></button>
+      <button onclick="pickRole('doctor')">🩺 Doctor <span class="hint">my customers today</span></button>
+      <button onclick="pickRole('therapist')">💆 Therapist <span class="hint">my rooms &amp; next up</span></button>
+    </div>
+    <div id="roleNameWrap" style="display:none;margin-top:12px">
+      <p class="hint" id="roleNameHint">Select your name:</p>
+      <select id="roleNameSel" style="width:100%"></select>
+      <button class="btn" style="width:100%;margin-top:10px" onclick="confirmRole()">Continue</button>
+      <button class="btn grey" style="width:100%;margin-top:6px" onclick="openRoleSetup()">← Back</button>
+    </div>
+  </div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   SS2 Flow Board — v2
+   - Per-node Firebase sync (occ/queue/lists/completed/removed)
+     so simultaneous edits from phones merge instead of clobber.
+   - Device roles: counter / consultant / doctor / therapist.
+   - Oxy step engine: one tap to start, timeline is computed
+     from the start timestamp; taps only correct reality.
+   ============================================================ */
+const FIREBASE_CONFIG={
+  apiKey: "AIzaSyCz5dcca5izkAzIguJmmrLIsJKevatKUEU",
+  authDomain: "urss2-8597b.firebaseapp.com",
+  databaseURL: "https://urss2-8597b-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "urss2-8597b",
+  storageBucket: "urss2-8597b.firebasestorage.app",
+  messagingSenderId: "875149967541",
+  appId: "1:875149967541:web:97fff0c6be4751bd79befc",
+  measurementId: ""
+};
+const BASE_PATH="board_v2";      // new sectioned data
+const OLD_PATH="board";          // v1 single-blob path (migrated once, left untouched)
+const LOGIN_DOMAIN="urss2.local";
+
+const LS_KEY="roomFlowBoard_urss2_v5";
+const LS_ROLE="urss2_v5_role";
+const LS_FILTER="urss2_v5_filterWindow";
+const SEED_TX=["Goldius Glam","Alex","Pro Light","P7","Revive","E2","EXO-T","S Plus (Face)","S Plus (Neck)","HIFU (Face)","HIFU (Neck)","Oxy","SRW","Soft Laser","Radiesse","Filler","Botox","dePigmentation","Revital"];
+const SEED={
+  doctors: ["Dr 1", "Dr 2"],
+  therapists: ["Thera 1", "Thera 2"],
+  treatments: [...SEED_TX],
+  groups: [
+    {name: "Downstairs", rooms: ["Room 1", "Room 2"]},
+    {name: "Upstairs", rooms: ["Room 3", "Room 4"]}
+  ],
+  customers: {}
+};
+const OXY_STEPS=[["Crystal Hydrosuction",5],["Derma Ultrasonic",5],["Bipolar Frequency",5],["Oxyinfusion",5],["Cool Lift",5]];
+const OXY_MASK_MIN=15;
+const STAGES=["Preparing","Washed · waiting","Numbing","Waiting for doctor","With doctor","Treatment ongoing","Mask on","Done soon"];
+
+let state=migrate(load())||freshState();
+let filterWindow=(localStorage.getItem(LS_FILTER)??"1")==="1";
+let ROLE=null,MYNAME="";
+try{const r=JSON.parse(localStorage.getItem(LS_ROLE)||"null");if(r&&r.role){ROLE=r.role;MYNAME=r.name||"";}}catch(e){}
+let pendingRole=null;
+let editingDocId=null,editingDocRoom=null,editingTimeId=null,editingTheraRoom=null,editingMaskRoom=null;
+let db=null,baseRef=null,cloudOn=false;
+let undoStack=[],histLast=null;const UNDO_MAX=5;
+let notifReady=false,seenAlerts={},activeNotifs=[];
+
+/* ===== state helpers ===== */
+function freshState(){const occ={};SEED.groups.forEach(g=>g.rooms.forEach(r=>occ[r]=null));
+  return {doctors:[...SEED.doctors],therapists:[...SEED.therapists],treatments:[...SEED.treatments],groups:JSON.parse(JSON.stringify(SEED.groups)),customers:{},occ,queue:[],completed:[],removed:[]};}
+function txArr(t){return Array.isArray(t)?t.slice():(t?[t]:[]);}
+function normRoomObj(o){if(!o)return null;if(o.note===undefined)o.note="";if(o.nextRoom===undefined)o.nextRoom="";if(o.stage===undefined)o.stage="";
+  o.doctor=o.doctor||"";o.therapist=o.therapist||"";o.mask=o.mask||"";o.appt=o.appt||"";o.customer=o.customer||"";
+  o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);
+  if(o.oxy&&typeof o.oxy==="object"){if(o.oxy.idx===undefined)o.oxy.idx=0;if(!o.oxy.ts)o.oxy.ts=Date.now();o.oxy.paused=!!o.oxy.paused;}else o.oxy=null;
+  return o;}
+function migrate(s){if(!s)return null;if(!s.completed)s.completed=[];if(!s.removed)s.removed=[];if(!s.treatments||!s.treatments.length)s.treatments=[...SEED.treatments];
+  if(!s.doctors||!s.doctors.length)s.doctors=[...SEED.doctors];
+  if(!s.therapists||!s.therapists.length)s.therapists=[...SEED.therapists];
+  if(!s.groups||!s.groups.length)s.groups=JSON.parse(JSON.stringify(SEED.groups));
+  if(!s.customers||typeof s.customers!=='object')s.customers={};
+  if(!Array.isArray(s.queue))s.queue=[];
+  if(!s.occ||typeof s.occ!=='object')s.occ={};
+  s.groups.forEach(g=>g.rooms.forEach(r=>{if(!(r in s.occ))s.occ[r]=null;}));
+  // Rescue occupants of rooms that no longer exist in the lists (e.g. after a rename):
+  // runs only on single-writer paths (local load, import, undo, restore) — never from sync,
+  // where every connected device would duplicate the queue entry.
+  const __rooms=s.groups.flatMap(g=>g.rooms);Object.keys(s.occ).forEach(r=>{const o=s.occ[r];if(o&&!__rooms.includes(r)){s.queue.push({id:nextId(),customer:o.customer,doctor:o.doctor||"",therapist:o.therapist||"",treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()});delete s.occ[r];}});
+  (s.queue||[]).forEach(q=>{if(q.arrivedAt===undefined)q.arrivedAt="";q.doctor=q.doctor||"";q.therapist=q.therapist||"";q.treatment=txArr(q.treatment);});
+  Object.keys(s.occ||{}).forEach(r=>{s.occ[r]=normRoomObj(s.occ[r]);});
+  Object.values(s.customers||{}).forEach(c=>{if(c){c.doctor=c.doctor||"";c.therapist=c.therapist||"";}});
+  (s.completed||[]).forEach(c=>{c.doctor=c.doctor||"";c.treatment=txArr(c.treatment);});
+  (s.removed||[]).forEach(c=>{c.treatment=txArr(c.treatment);});return s;}
+function load(){try{const s=localStorage.getItem(LS_KEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+function saveLocal(){try{localStorage.setItem(LS_KEY,JSON.stringify(state));}catch(e){}}
+function nextId(){return Date.now()*100+Math.floor(Math.random()*100);}
+function fbKey(s){return String(s).replace(/[.#$/\[\]]/g,'_').trim()||"_";}
+
+/* ===== cloud write layer =====
+   Every action mutates `state` locally then calls cloudPatch()
+   with only the paths it touched. Firebase update() applies the
+   paths atomically; other sections are never rewritten, so two
+   devices editing different things can no longer erase each other. */
+function cloudPatch(patch){
+  if(baseRef){try{baseRef.update(patch);}catch(e){}}
+  saveLocal();recordHistory();render();}
+function roomPatch(room){const o=state.occ[room];const v=o?Object.assign({},o,{room}):null;
+  return {["occ/"+fbKey(room)]:v};}
+function commitRoom(room){cloudPatch(roomPatch(room));}
+function queuePatch(q){return {["queue/"+q.id]:q};}
+function commitQueue(q){cloudPatch(queuePatch(q));}
+function custPatch(name){return {["lists/customers/"+fbKey(name)]:state.customers[name]||null};}
+function listsPatch(){return {"lists/doctors":state.doctors,"lists/therapists":state.therapists,"lists/treatments":state.treatments,"lists/groups":state.groups,"lists/customers":state.customers};}
+function fullStateObj(st){
+  const occ={};Object.entries(st.occ||{}).forEach(([r,o])=>{if(o)occ[fbKey(r)]=Object.assign({},o,{room:r});});
+  const q={};(st.queue||[]).forEach(x=>{if(!x.id)x.id=nextId();q[x.id]=x;});
+  const cm={};(st.completed||[]).forEach(x=>{if(!x.id)x.id=nextId()+Math.floor(Math.random()*50);cm[x.id]=x;});
+  const rm={};(st.removed||[]).forEach(x=>{if(!x.id)x.id=nextId()+Math.floor(Math.random()*50);rm[x.id]=x;});
+  return {lists:{doctors:st.doctors,therapists:st.therapists,treatments:st.treatments,groups:st.groups,customers:st.customers||{}},
+    occ:Object.keys(occ).length?occ:null,queue:Object.keys(q).length?q:null,
+    completed:Object.keys(cm).length?cm:null,removed:Object.keys(rm).length?rm:null};}
+function pushFullState(st){state=migrate(st)||freshState();
+  if(baseRef){try{baseRef.set(fullStateObj(state));}catch(e){}}
+  saveLocal();recordHistory();render();}
+
+/* ===== cloud read layer ===== */
+function applyLists(v){v=v||{};
+  state.doctors=(v.doctors||[]).filter(Boolean);if(!state.doctors.length)state.doctors=[...SEED.doctors];
+  state.therapists=(v.therapists||[]).filter(Boolean);if(!state.therapists.length)state.therapists=[...SEED.therapists];
+  state.treatments=(v.treatments||[]).filter(Boolean);if(!state.treatments.length)state.treatments=[...SEED_TX];
+  state.groups=(v.groups&&v.groups.length)?v.groups.map(g=>({name:g.name,rooms:(g.rooms||[]).filter(Boolean)})):JSON.parse(JSON.stringify(SEED.groups));
+  state.customers=v.customers||{};
+  Object.values(state.customers).forEach(c=>{if(c){c.doctor=c.doctor||"";c.therapist=c.therapist||"";}});
+  state.groups.forEach(g=>g.rooms.forEach(r=>{if(!(r in state.occ))state.occ[r]=null;}));
+  if(pendingRole)fillRoleNames();
+  saveLocal();render();}
+function applyOcc(v){const occ={};state.groups.forEach(g=>g.rooms.forEach(r=>occ[r]=null));
+  Object.entries(v||{}).forEach(([k,o])=>{if(!o)return;const name=o.room||k;occ[name]=normRoomObj(o);});
+  state.occ=occ;scanAlerts();saveLocal();render();}
+function applyQueue(v){state.queue=Object.values(v||{}).filter(Boolean).map(q=>{q.treatment=txArr(q.treatment);q.arrivedAt=q.arrivedAt||"";q.doctor=q.doctor||"";q.therapist=q.therapist||"";return q;}).sort((a,b)=>(a.id||0)-(b.id||0));
+  scanAlerts();saveLocal();render();}
+function applyRecs(which,v){state[which]=Object.values(v||{}).filter(Boolean).map(c=>{c.treatment=txArr(c.treatment);return c;}).sort((a,b)=>(a.id||0)-(b.id||0));
+  saveLocal();render();}
+
+/* ===== doctor notifications (in-app; fires while the app is open) ===== */
+function scanAlerts(){
+  if(ROLE!=='doctor'||!MYNAME)return;
+  const found=[];
+  state.queue.forEach(q=>{if(q.doctor===MYNAME&&q.arrivedAt)found.push({k:"q"+q.id,msg:q.customer+" has arrived · waiting"});});
+  allRooms().forEach(r=>{const o=state.occ[r];if(o&&o.doctor===MYNAME&&o.stage==="Waiting for doctor")found.push({k:"r"+r+"|"+o.customer,msg:o.customer+" — waiting for you in "+r});});
+  if(!notifReady){found.forEach(f=>seenAlerts[f.k]=1);return;}
+  found.forEach(f=>{if(!seenAlerts[f.k]){seenAlerts[f.k]=1;activeNotifs.push(f);beep();try{navigator.vibrate&&navigator.vibrate([180,90,180]);}catch(e){}}});
+}
+function dismissNotif(k){activeNotifs=activeNotifs.filter(n=>n.k!==k);render();}
+let audioCtx=null;
+function beep(){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);
+  o.frequency.value=880;g.gain.setValueAtTime(.25,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.5);
+  o.start();o.stop(audioCtx.currentTime+.5);}catch(e){}}
+
+/* ===== backups (local, unchanged) ===== */
+const BK_KEY="roomFlowBoard_v5_backups",BK_MAX=18;
+function loadBackups(){try{const a=JSON.parse(localStorage.getItem(BK_KEY)||"[]");return Array.isArray(a)?a:[];}catch(e){return [];}}
+function autoBackup(){try{const json=JSON.stringify(state);const arr=loadBackups();const last=arr[arr.length-1];
+  if(last&&last.json===json)last.t=Date.now();else arr.push({t:Date.now(),json});
+  while(arr.length>BK_MAX)arr.shift();localStorage.setItem(BK_KEY,JSON.stringify(arr));}catch(e){}}
+function bkTime(t){const d=new Date(t);return pad(d.getHours())+":"+pad(d.getMinutes())+" ("+(d.getMonth()+1)+"/"+d.getDate()+")";}
+function openBackups(){const arr=loadBackups().slice().reverse();
+  let html=arr.length?'':'<div class="hint">No backups yet. The board saves a local snapshot automatically every 10 minutes.</div>';
+  arr.forEach(b=>{let rooms=0,q=0;try{const st=JSON.parse(b.json);rooms=Object.values(st.occ||{}).filter(Boolean).length;q=(st.queue||[]).length;}catch(e){}
+    html+=`<div class="rec-item">🗂 ${esc(bkTime(b.t))} · ${rooms} in use · ${q} in queue/appts <button class="btn sm" style="margin-left:6px" onclick="restoreBackup(${b.t})">Restore</button></div>`;});
+  $("backupBody").innerHTML=html;$("backupModal").classList.add("show");}
+function restoreBackup(t){const b=loadBackups().find(x=>x.t===t);if(!b)return;
+  if(!confirm("Restore the board to the snapshot from "+bkTime(t)+"?\nThis replaces the current board"+(cloudOn?" on ALL connected devices":"")+"."))return;
+  try{autoBackup();pushFullState(JSON.parse(b.json));closeModal('backupModal');toast("Backup restored");}catch(e){toast("Could not restore backup");}}
+
+/* ===== tiny utils ===== */
+function $(id){return document.getElementById(id);}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function jsq(s){return esc(String(s||"").replace(/\\/g,'\\\\').replace(/'/g,"\\'"));}
+function pad(n){return String(n).padStart(2,'0');}
+function curMin(){const d=new Date();return d.getHours()*60+d.getMinutes();}
+function toMin(hm){if(!hm)return null;const[h,m]=hm.split(":").map(Number);return h*60+(m||0);}
+function nowHM(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes());}
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
+function allRooms(){return state.groups.flatMap(g=>g.rooms);}
+function freeRooms(){return allRooms().filter(r=>!state.occ[r]);}
+function thOptions(sel){return ['<option value="">Therapist…</option>'].concat(state.therapists.map(d=>`<option ${d===sel?'selected':''}>${esc(d)}</option>`)).join('');}
+function docOptions(sel){return ['<option value="">Doctor…</option>'].concat(state.doctors.map(d=>`<option ${d===sel?'selected':''}>${esc(d)}</option>`)).join('');}
+function parseTimeInput(s){s=(s||"").trim().toLowerCase();if(!s)return"";let pm=/p/.test(s),am=/a/.test(s);let h,mm;if(s.includes(":")){let p=s.replace(/[^0-9:]/g,'').split(":");h=parseInt(p[0]||"0",10);mm=parseInt(p[1]||"0",10);}else{let d=s.replace(/\D/g,'');if(!d)return"";if(d.length<=2){h=parseInt(d,10);mm=0;}else{mm=parseInt(d.slice(-2),10);h=parseInt(d.slice(0,-2),10);}}if(isNaN(h))return"";if(isNaN(mm))mm=0;if(am){if(h===12)h=0;}else if(pm){if(h<12)h+=12;}else if(h>=1&&h<=9)h+=12;if(h>23||mm>59)return"";return pad(h)+":"+pad(mm);}
+function hm12(hm){if(!hm)return"";let[h,m]=hm.split(":").map(Number);let ap=h>=12?'PM':'AM';let hh=h%12;if(hh===0)hh=12;return hh+":"+pad(m)+" "+ap;}
+function txDisp(t){return txArr(t).join(" + ");}
+function txChips(t,prefix){return txArr(t).map((x,i)=>`<span class="txchip">${esc(x)}<b onclick="${prefix}${i})">✕</b></span>`).join('');}
+function fillSel(id,html){const el=$(id);if(!el)return;const v=el.value;el.innerHTML=html;el.value=v;}
+function sendRoomOpts(label){return ['<option value="">'+label+'</option>'].concat(freeRooms().map(r=>`<option>${esc(r)}</option>`)).join('');}
+function isCounter(){return ROLE==='counter';}
+function isBoardRole(){return ROLE==='counter'||ROLE==='consultant';}
+
+/* ===== queue & room actions ===== */
+function arrive(){const name=fbKey($("arriveName").value.trim());if(!name||name==="_"){toast("Type a name first");return;}
+  const doc=$("arriveDoc").value;
+  if(!state.customers[name])state.customers[name]={doctor:"",therapist:""};
+  if(doc)state.customers[name].doctor=doc;
+  const c=state.customers[name];
+  const txs=$("arriveTx").value.split(",").map(s=>s.trim()).filter(Boolean);
+  const q={id:nextId(),customer:name,doctor:doc||c.doctor||"",therapist:c.therapist||"",treatment:txs,appt:parseTimeInput($("arriveTime").value),arrivedAt:""};
+  state.queue.push(q);
+  $("arriveName").value="";$("arriveTx").value="";$("arriveDoc").value="";$("arriveTime").value="";
+  cloudPatch(Object.assign(queuePatch(q),custPatch(name)));}
+function setCustDoc(name,v){if(!name)return null;state.customers[name]=state.customers[name]||{doctor:"",therapist:""};state.customers[name].doctor=v;return custPatch(name);}
+function setCustThera(name,v){if(!name)return null;state.customers[name]=state.customers[name]||{doctor:"",therapist:""};state.customers[name].therapist=v;return custPatch(name);}
+function qSetDoctor(id,v){const q=state.queue.find(x=>x.id==id);if(q){q.doctor=v;const cp=setCustDoc(q.customer,v);editingDocId=null;cloudPatch(Object.assign(queuePatch(q),cp||{}));}}
+function qSetThera(id,v){const q=state.queue.find(x=>x.id==id);if(q){q.therapist=v;const cp=setCustThera(q.customer,v);cloudPatch(Object.assign(queuePatch(q),cp||{}));}}
+function qSetAppt(id,v){const q=state.queue.find(x=>x.id==id);if(q){q.appt=v;editingTimeId=null;commitQueue(q);}}
+function editDoc(id){editingDocId=id;editingDocRoom=null;editingTimeId=null;editingTheraRoom=null;editingMaskRoom=null;render();}
+function editTime(id){editingTimeId=id;editingDocId=null;editingDocRoom=null;editingTheraRoom=null;editingMaskRoom=null;render();}
+function editTheraRoom(room){editingTheraRoom=room;editingDocId=null;editingDocRoom=null;editingTimeId=null;editingMaskRoom=null;render();}
+function maskBump(room,delta){const o=state.occ[room];if(!o||!o.mask)return;let m=(toMin(o.mask)+delta+1440)%1440;o.mask=pad(Math.floor(m/60))+":"+pad(m%60);commitRoom(room);}
+function roomSetTherapist(room,v){const o=state.occ[room];if(o){o.therapist=v;editingTheraRoom=null;commitRoom(room);}}
+function cancelEdit(){editingDocId=null;editingDocRoom=null;editingTimeId=null;editingTheraRoom=null;editingMaskRoom=null;render();}
+function qTxAdd(id,v){v=v.trim();if(!v)return;const q=state.queue.find(x=>x.id==id);if(q){q.treatment=txArr(q.treatment);if(!q.treatment.includes(v))q.treatment.push(v);commitQueue(q);}}
+function qTxRemove(id,i){const q=state.queue.find(x=>x.id==id);if(q){q.treatment=txArr(q.treatment);q.treatment.splice(i,1);commitQueue(q);}}
+function qCheckIn(id){const q=state.queue.find(x=>x.id==id);if(q){q.arrivedAt=q.arrivedAt?"":nowHM();commitQueue(q);}}
+function removeQueue(id){const q=state.queue.find(x=>x.id==id);if(!q)return;
+  const rec={id:nextId(),customer:q.customer,doctor:q.doctor,treatment:txArr(q.treatment),appt:q.appt,at:nowHM()};
+  state.removed.push(rec);state.queue=state.queue.filter(x=>x.id!=id);
+  cloudPatch({["queue/"+id]:null,["removed/"+rec.id]:rec});}
+function moveQueueToRoom(id,room){if(!room)return;const i=state.queue.findIndex(x=>x.id==id);if(i<0)return;
+  if(state.occ[room]){toast(room+" is occupied");render();return;}const rv=nextFor(room);if(rv){toast(room+" is reserved for "+rv.customer);render();return;}const q=state.queue[i];
+  state.occ[room]=normRoomObj({customer:q.customer,doctor:q.doctor,therapist:q.therapist,treatment:txArr(q.treatment),txDone:[],mask:"",appt:q.appt||"",note:"",nextRoom:"",stage:"",oxy:null});
+  state.queue.splice(i,1);
+  cloudPatch(Object.assign({["queue/"+id]:null},roomPatch(room)));}
+function roomSet(room,f,v){if(state.occ[room]){state.occ[room][f]=v;commitRoom(room);}}
+function roomSetDoctor(room,v){const o=state.occ[room];if(o){o.doctor=v;const cp=setCustDoc(o.customer,v);editingDocRoom=null;cloudPatch(Object.assign(roomPatch(room),cp||{}));}}
+function editDocRoom(room){editingDocRoom=room;editingDocId=null;editingTimeId=null;editingMaskRoom=null;render();}
+function roomTxAdd(room,v){v=v.trim();if(!v)return;const o=state.occ[room];if(o){o.treatment=txArr(o.treatment);if(!o.treatment.includes(v))o.treatment.push(v);commitRoom(room);}}
+function roomTxRemove(room,i){const o=state.occ[room];if(o){o.treatment=txArr(o.treatment);o.treatment.splice(i,1);commitRoom(room);}}
+function roomTxDone(room,i){const o=state.occ[room];if(!o)return;o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);const x=o.treatment.splice(i,1)[0];if(x)o.txDone.push(x);commitRoom(room);}
+function roomTxUndo(room,i){const o=state.occ[room];if(!o)return;o.txDone=txArr(o.txDone);o.treatment=txArr(o.treatment);const x=o.txDone.splice(i,1)[0];if(x)o.treatment.push(x);commitRoom(room);}
+function roomSetNext(room,v){const o=state.occ[room];if(o){o.nextRoom=v;commitRoom(room);}}
+function nextFor(room){for(const r of allRooms()){const o=state.occ[r];if(o&&o.nextRoom===room)return {customer:o.customer,from:r};}return null;}
+function maskIn(room,mins){if(!state.occ[room])return;let m=(curMin()+mins)%1440;state.occ[room].mask=pad(Math.floor(m/60))+":"+pad(m%60);commitRoom(room);}
+function maskClear(room){if(state.occ[room]){state.occ[room].mask="";commitRoom(room);}}
+function moveRoomToRoom(from,to){if(!to)return;if(state.occ[to]){toast(to+" is occupied");render();return;}const rv=nextFor(to);if(rv&&rv.from!==from){toast(to+" is reserved for "+rv.customer);render();return;}
+  state.occ[to]=state.occ[from];state.occ[to].nextRoom="";state.occ[from]=null;
+  cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));}
+function roomToQueue(room){const o=state.occ[room];if(!o)return;const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
+  state.queue.push(q);state.occ[room]=null;
+  cloudPatch(Object.assign(queuePatch(q),roomPatch(room)));}
+function clearRoom(room){const o=state.occ[room];if(o&&!o.therapist){toast("Assign a therapist before clearing the room");return;}if(o&&!confirm("Clear "+room+" and free it?"))return;
+  let patch=roomPatch(room);
+  if(o){const rec={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.txDone).concat(txArr(o.treatment)),room,at:nowHM()};
+    state.completed.push(rec);state.occ[room]=null;patch=Object.assign(roomPatch(room),{["completed/"+rec.id]:rec});}
+  else state.occ[room]=null;
+  cloudPatch(patch);}
+function assignFreeRoom(room,id){if(id)moveQueueToRoom(parseInt(id,10),room);}
+function toggleFilter(v){filterWindow=v;try{localStorage.setItem(LS_FILTER,v?"1":"0");}catch(e){}render();}
+function resetBoard(){if(!isCounter())return;if(!confirm("Reset the board to empty? This clears all rooms, queue, waiting, and today's records. Your doctor/therapist/treatment/room lists are kept."))return;
+  autoBackup();const occ={};allRooms().forEach(r=>occ[r]=null);state.occ=occ;state.queue=[];state.completed=[];state.removed=[];
+  if(baseRef){try{baseRef.update({occ:null,queue:null,completed:null,removed:null});}catch(e){}}
+  saveLocal();recordHistory();render();toast("Board reset");}
+
+/* ===== Oxy step engine =====
+   o.oxy = {idx, ts, paused, pausedAt}. Position is COMPUTED from
+   the anchor (idx, ts) at render time — nothing writes on a timer,
+   so five phones can watch the countdown without a single write.
+   Taps re-anchor when reality deviates. */
+function hasOxyTx(o){return txArr(o.treatment).concat(txArr(o.txDone)).some(t=>/oxy/i.test(t));}
+function oxyPos(o){const x=o&&o.oxy;if(!x)return null;
+  const now=x.paused?(x.pausedAt||Date.now()):Date.now();
+  let el=Math.max(0,(now-x.ts)/60000);let i=x.idx||0;
+  while(i<OXY_STEPS.length&&el>=OXY_STEPS[i][1]){el-=OXY_STEPS[i][1];i++;}
+  if(i>=OXY_STEPS.length)return {i:OXY_STEPS.length,rem:0,fin:true};
+  return {i,rem:Math.max(0,Math.ceil(OXY_STEPS[i][1]-el)),fin:false};}
+function oxyStart(room){const o=state.occ[room];if(!o)return;o.oxy={idx:0,ts:Date.now(),paused:false,pausedAt:0};
+  if(!o.stage||o.stage==="Preparing"||o.stage==="Washed · waiting")o.stage="Treatment ongoing";commitRoom(room);}
+function oxyNext(room){const o=state.occ[room];if(!o||!o.oxy)return;const p=oxyPos(o);
+  o.oxy={idx:Math.min(p.i+1,OXY_STEPS.length),ts:Date.now(),paused:false,pausedAt:0};commitRoom(room);}
+function oxyJump(room,i){const o=state.occ[room];if(!o)return;i=parseInt(i,10);if(isNaN(i))return;
+  o.oxy={idx:i,ts:Date.now(),paused:false,pausedAt:0};
+  if(!o.stage||/waiting|doctor/i.test(o.stage)===false)o.stage="Treatment ongoing";commitRoom(room);}
+function oxyPause(room){const o=state.occ[room];if(!o||!o.oxy)return;const x=o.oxy;
+  if(x.paused){x.ts+=Date.now()-(x.pausedAt||Date.now());x.paused=false;x.pausedAt=0;}
+  else{x.paused=true;x.pausedAt=Date.now();}
+  commitRoom(room);}
+function oxyBump(room,mins){const o=state.occ[room];if(!o||!o.oxy)return;o.oxy.ts+=mins*60000;
+  if(o.oxy.ts>Date.now())o.oxy.ts=Date.now();commitRoom(room);}
+function oxyEnd(room){const o=state.occ[room];if(!o)return;o.oxy=null;commitRoom(room);}
+function oxyFinishToMask(room){const o=state.occ[room];if(!o)return;
+  o.oxy=null;
+  o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);
+  for(let i=o.treatment.length-1;i>=0;i--){if(/^oxy/i.test(o.treatment[i])){o.txDone.push(o.treatment.splice(i,1)[0]);}}
+  o.stage="Mask on";
+  let m=(curMin()+OXY_MASK_MIN)%1440;o.mask=pad(Math.floor(m/60))+":"+pad(m%60);
+  commitRoom(room);}
+function oxyDots(i){let s="";for(let k=0;k<OXY_STEPS.length;k++)s+=`<span class="${k<i?'on':(k===i?'on':'off')}">${k<i?'●':(k===i?'◉':'○')}</span>`;return `<span class="oxydots">${s}</span>`;}
+function oxyBlock(room,o,editable){
+  const p=oxyPos(o);
+  if(!p){
+    if(!editable)return "";
+    if(hasOxyTx(o))return `<div class="fieldrow"><label>Oxy</label><div style="padding-top:3px"><button class="chip go" onclick="oxyStart('${jsq(room)}')">▶ Start Oxy steps</button></div></div>`;
+    return "";}
+  if(p.fin){
+    return `<div class="oxybox"><div class="oxyline">${oxyDots(5)} Steps done ✓</div>
+      ${editable?`<div class="oxyctl"><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">▶ Start mask ${OXY_MASK_MIN}m</button><button class="chip" onclick="oxyEnd('${jsq(room)}')">End without mask</button><select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">↩ redo step…</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select></div>`:''}
+    </div>`;}
+  const nm=OXY_STEPS[p.i][0];
+  const remCls=p.rem<=1?'over':(p.rem<=2?'soon':'');
+  return `<div class="oxybox${o.oxy.paused?' paused':''}"><div class="oxyline">${oxyDots(p.i)} <span>Oxy ${p.i+1}/5 · ${esc(nm)}</span> ${o.oxy.paused?'<span class="oxyrem">⏸ paused</span>':`<span class="oxyrem ${remCls}">~${p.rem}m left</span>`}</div>
+    ${editable?`<div class="oxyctl">
+      <button class="chip go" onclick="oxyNext('${jsq(room)}')">✓ Done → next</button>
+      <button class="chip" onclick="oxyPause('${jsq(room)}')">${o.oxy.paused?'▶ Resume':'⏸ Pause'}</button>
+      <button class="chip" onclick="oxyBump('${jsq(room)}',5)">+5m</button>
+      <select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">jump to…</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select>
+      <button class="maskx" title="cancel Oxy tracking" onclick="oxyEnd('${jsq(room)}')">✕</button>
+    </div>`:''}
+  </div>`;}
+function statusFor(o){const p=oxyPos(o);
+  if(p){if(p.fin)return {t:"Oxy steps done — mask next",cls:""};
+    return {t:"Oxy "+(p.i+1)+"/5 · "+OXY_STEPS[p.i][0]+(o.oxy.paused?" · ⏸ paused":" · ~"+p.rem+"m left"),cls:""};}
+  if(o.mask){const d=toMin(o.mask)-curMin();return d<0?{t:"MASK OVERDUE "+(-d)+"m",cls:"mo"}:{t:"Mask off "+hm12(o.mask)+" · in "+d+"m",cls:""};}
+  return {t:o.stage||"In room",cls:""};}
+
+/* ===== undo (board roles) ===== */
+function updateUndoBtn(){const b=$("undoBtn");if(!b)return;const n=undoStack.length;b.disabled=!n;b.textContent="↶ Undo"+(n?" ("+n+")":"");}
+function recordHistory(){const cur=JSON.stringify(state);if(cur===histLast)return;
+  if(histLast!=null){undoStack.push(histLast);while(undoStack.length>UNDO_MAX)undoStack.shift();}
+  histLast=cur;updateUndoBtn();}
+function undo(){if(!undoStack.length){toast("Nothing to undo");return;}
+  const prev=undoStack.pop();let st;try{st=migrate(JSON.parse(prev));}catch(e){toast("Could not undo");return;}
+  state=st;histLast=JSON.stringify(state);
+  if(baseRef){try{baseRef.set(fullStateObj(state));}catch(e){}}
+  saveLocal();render();updateUndoBtn();toast("Undid last change");}
+function toggleMenu(e){e.stopPropagation();const m=$("moreMenu");if(m)m.classList.toggle("show");}
+function closeMenu(){const m=$("moreMenu");if(m)m.classList.remove("show");}
+
+/* ===== render dispatch ===== */
+function maskRel(hm){if(!hm)return"";const m=toMin(hm);if(m==null)return"";let d=m-curMin();
+  if(d>=0)return `<span class="rel ${d<=5?'soon':''}">in ${d}m</span>`;return `<span class="rel over">${-d}m ago</span>`;}
+function maskClass(o){if(!o.mask)return"";const d=toMin(o.mask)-curMin();if(d<0)return" maskOver";if(d<=5)return" maskSoon";return"";}
+function docInline(id,doc){return editingDocId===id?`<select id="activeEdit" onblur="cancelEdit()" onchange="qSetDoctor(${id},this.value)" style="flex:1">${docOptions(doc)}</select>`:`<span class="docline">${esc(doc)||'no doctor'}</span><button class="docedit" title="change doctor" onclick="editDoc(${id})">✎</button>`;}
+
+function render(){
+  if(!ROLE)return;
+  if(isBoardRole())renderBoard();else renderPhone();
+}
+function applyRoleChrome(){
+  const board=isBoardRole();
+  $("boardMain").style.display=board?"":"none";
+  $("phoneMain").style.display=board?"none":"";
+  document.querySelectorAll(".boardOnly").forEach(el=>el.style.display=board?"":"none");
+  document.querySelectorAll(".counterOnly").forEach(el=>el.style.display=isCounter()?"":"none");
+  document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=board?"":"none");
+  $("logoutBtnPhone").style.display=(!board&&cloudOn)?"":"none";
+  const chip=$("roleChip");
+  if(ROLE){chip.style.display="";const icon={counter:"🖥",consultant:"🧭",doctor:"🩺",therapist:"💆"}[ROLE]||"";
+    chip.textContent=icon+" "+(MYNAME||ROLE)+" ⇄";}
+  else chip.style.display="none";
+}
+
+/* ---- board (counter / consultant) ---- */
+function renderBoard(){
+  $("custList").innerHTML=Object.keys(state.customers||{}).sort().map(n=>`<option value="${esc(n)}">`).join('');
+  $("txList").innerHTML=state.treatments.map(t=>`<option value="${esc(t)}">`).join('');
+  fillSel("arriveDoc",docOptions(""));
+  let html="";state.groups.forEach(g=>{html+=`<div class="group-title">${esc(g.name)}</div><div class="rooms-grid">`+g.rooms.map(roomCard).join('')+`</div>`;});
+  const __known=allRooms();const __orph=Object.keys(state.occ).filter(r=>state.occ[r]&&!__known.includes(r));
+  if(__orph.length)html+=`<div class="group-title" style="color:#7b2cbf">⚠ Unlisted rooms (rename in Edit lists or move the customer)</div><div class="rooms-grid">`+__orph.map(roomCard).join('')+`</div>`;
+  $("roomsHost").innerHTML=html;
+  renderThera();renderWaiting();renderQueue();
+  const ae=$("activeEdit");if(ae)ae.focus();
+}
+function stageSel(room,o){return `<select class="stagesel" onchange="roomSet('${jsq(room)}','stage',this.value)"><option value="">stage…</option>${STAGES.map(s=>`<option ${o.stage===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`;}
+function roomCard(room){
+  const o=state.occ[room];const nx=nextFor(room);
+  const nb=nx?`<div class="nextbanner">⏭ Next here: ${esc(nx.customer)} (from ${esc(nx.from)})</div>`:'';
+  if(!o){const qOpts=['<option value="">Assign from queue ▾</option>'].concat(state.queue.map(q=>`<option value="${q.id}">${esc(q.customer)}${q.arrivedAt?' (waiting)':''}</option>`)).join('');
+    return `<div class="room free${nx?' hasnext':''}"><div class="rhead"><span class="rname">${esc(room)}</span><span class="pill">${nx?'RESERVED':'FREE'}</span></div>
+      <div class="freebody">${nb}<select onchange="assignFreeRoom('${jsq(room)}',this.value)">${qOpts}</select></div></div>`;}
+  const nextOpts=['<option value="">set next room…</option>'].concat(allRooms().filter(r=>r!==room).map(r=>`<option ${o.nextRoom===r?'selected':''}>${esc(r)}</option>`)).join('');
+  const goBtn=o.nextRoom?`<button class="btn sm" onclick="moveRoomToRoom('${jsq(room)}','${jsq(o.nextRoom)}')">→ ${esc(o.nextRoom)} now</button>`:'';
+  const docEl=editingDocRoom===room?`<select id="activeEdit" onblur="cancelEdit()" onchange="roomSetDoctor('${jsq(room)}',this.value)" style="flex:1">${docOptions(o.doctor)}</select>`:`<span class="docline">${esc(o.doctor)||'no doctor'}</span><button class="docedit" title="change doctor" onclick="editDocRoom('${jsq(room)}')">✎</button>`;
+  const editingT=editingTheraRoom===room;
+  const theraEl=(!o.therapist||editingT)?`<select ${editingT?'id="activeEdit" onblur="cancelEdit()"':''} onchange="roomSetTherapist('${jsq(room)}',this.value)" style="flex:1">${thOptions(o.therapist)}</select>`:`<span class="docline">${esc(o.therapist)}</span><button class="docedit" title="change therapist" onclick="editTheraRoom('${jsq(room)}')">✎</button>`;
+  const remChips=txArr(o.treatment).map((x,i)=>`<span class="txchip"><span class="txname" title="tap when done" onclick="roomTxDone('${jsq(room)}',${i})">${esc(x)}</span><b title="remove" onclick="roomTxRemove('${jsq(room)}',${i})">✕</b></span>`).join('');
+  const doneChips=txArr(o.txDone).map((x,i)=>`<span class="txchip done"><span class="txname" title="tap to undo" onclick="roomTxUndo('${jsq(room)}',${i})">${esc(x)}</span></span>`).join('');
+  return `<div class="room occ${maskClass(o)}${o.therapist?'':' noThera'}"><div class="rhead"><span class="rname">${esc(room)}</span><span class="pill">${o.mask&&toMin(o.mask)-curMin()<0?'MASK OFF':'IN USE'}</span></div>
+    <div class="body">${nb}${o.therapist?'':'<div class="noTheraBanner">⚠ No therapist assigned</div>'}
+      <div class="cust">${esc(o.customer)}</div>
+      <div class="fieldrow"><label>Doctor</label><div style="flex:1;display:flex;align-items:center;gap:4px;padding-top:6px">${docEl}</div></div>
+      <div class="fieldrow"><label>Thera.</label><div style="flex:1;display:flex;align-items:center;gap:4px;padding-top:6px">${theraEl}</div></div>
+      <div class="fieldrow"><label>Stage</label>${stageSel(room,o)}</div>
+      <div class="fieldrow"><label>Tx</label><div class="txwrap">${remChips}<input class="txin" list="txList" placeholder="+ add" onchange="roomTxAdd('${jsq(room)}',this.value);this.value=''"></div></div>
+      ${doneChips?`<div class="fieldrow"><label>Done</label><div class="txwrap">${doneChips}</div></div>`:''}
+      ${oxyBlock(room,o,true)}
+      ${o.mask?`<div class="fieldrow"><label>Mask off</label><div style="flex:1;padding-top:6px"><b>${esc(hm12(o.mask))}</b><span class="mstep"><button title="+1 min" onclick="maskBump('${jsq(room)}',1)">▲</button><button title="-1 min" onclick="maskBump('${jsq(room)}',-1)">▼</button></span>${maskRel(o.mask)} <button class="maskx" title="clear mask-off time" onclick="maskClear('${jsq(room)}')">✕</button></div></div>`:`<div class="fieldrow maskrow"><label style="width:auto">Mask</label><span class="hint">on for:</span><button class="chip" onclick="maskIn('${jsq(room)}',5)">5m</button><button class="chip" onclick="maskIn('${jsq(room)}',10)">10m</button><button class="chip" onclick="maskIn('${jsq(room)}',15)">15m</button><span class="maskbreak"></span><span class="mhidden">Mask</span><span class="hint mhidden">on for:</span><input class="timein" title="exact time" placeholder="e.g. 345" onchange="roomSet('${jsq(room)}','mask',parseTimeInput(this.value))"></div>`}
+      <div class="fieldrow"><label>Note</label><input class="note-in" value="${esc(o.note||'')}" placeholder="remark for this room…" onchange="roomSet('${jsq(room)}','note',this.value)"></div>
+      <div class="fieldrow"><label>Next →</label><select onchange="roomSetNext('${jsq(room)}',this.value)">${nextOpts}</select></div>
+      <div class="actions">${goBtn}
+        <button class="btn sm red" onclick="clearRoom('${jsq(room)}')">Clear Room</button>
+        <button class="btn sm grey" onclick="roomToQueue('${jsq(room)}')">↩ Back to queue</button>
+      </div>
+    </div></div>`;
+}
+function renderThera(){
+  let busy={};allRooms().forEach(r=>{const o=state.occ[r];if(o&&o.therapist)(busy[o.therapist]=busy[o.therapist]||[]).push(r);});
+  let avail=state.therapists.filter(t=>!busy[t]);
+  let html=`<div class="section-title">Therapists available</div>`+(avail.length?avail.map(t=>`<span class="tag">${esc(t)}</span>`).join(''):'<span class="hint">none free</span>');
+  let bk=Object.keys(busy);if(bk.length)html+=`<div class="section-title" style="margin-top:10px">Busy</div>`+bk.map(t=>`<span class="tag busy">${esc(t)} · ${busy[t].map(esc).join(', ')}</span>`).join('');
+  let noTh=allRooms().filter(r=>state.occ[r]&&!state.occ[r].therapist);
+  if(noTh.length)html+=`<div class="section-title" style="margin-top:10px;color:#7b2cbf">⚠ No therapist yet</div>`+noTh.map(r=>`<span class="tag warn">${esc(r)} · ${esc(state.occ[r].customer)}</span>`).join('');
+  $("theraPanel").innerHTML=html;
+}
+function renderWaiting(){
+  const nowM=curMin();
+  let w=state.queue.filter(q=>q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
+  let html=`<div class="section-title">Waiting room — longest first (${w.length})</div>`;
+  if(!w.length){html+=`<div class="hint">No one checked in. Tap “✓ Arrived” on an appointment.</div>`;}
+  w.forEach(({q,wait})=>{const cls=wait>=40?'wlong':wait>=20?'wmed':'';
+    html+=`<div class="witem ${cls}"><div class="wtop"><b>${esc(q.customer)}</b><span class="wmin">${wait}m</span></div>
+      <div class="qmeta" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">${docInline(q.id,q.doctor)}${q.appt?' · '+esc(hm12(q.appt)):''}</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:12px"><select style="flex:1" onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select></div>
+      <div class="txwrap">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ tx" onchange="qTxAdd(${q.id},this.value);this.value=''"></div>
+      <div style="display:flex;gap:6px;align-items:center"><select onchange="moveQueueToRoom(${q.id},this.value)" style="flex:1">${sendRoomOpts('→ room ▾')}</select><button class="btn sm grey" title="Clicked Arrived by mistake — send back to appointments" onclick="qCheckIn(${q.id})">↩ appts</button><button class="btn sm grey" title="Remove customer (logged in Records)" onclick="removeQueue(${q.id})">✕</button></div></div>`;});
+  $("waitPanel").innerHTML=html;
+}
+function renderQueue(){
+  const nowM=curMin();
+  let base=state.queue.filter(q=>!q.arrivedAt);
+  let timed=base.filter(q=>q.appt).sort((a,b)=>toMin(a.appt)-toMin(b.appt));
+  let notimed=base.filter(q=>!q.appt);
+  let shown=filterWindow?timed.filter(q=>{const d=toMin(q.appt)-nowM;return d>=-60&&d<=60;}):timed;
+  let html=`<div class="filterbar"><label><input type="checkbox" ${filterWindow?'checked':''} onchange="toggleFilter(this.checked)"> Within 1 hr of appt</label><span class="hint">${shown.length} shown / ${base.length} not arrived</span></div>`;
+  if(!shown.length)html+=`<div class="empty">${filterWindow?'No appointments within an hour of now.':'No timed appointments.'}</div>`;
+  shown.forEach(q=>{html+=qCard(q);});
+  if(notimed.length){html+=`<div class="section-title" style="margin-top:14px">No set time (${notimed.length})</div>`;notimed.forEach(q=>{html+=qCard(q);});}
+  $("queueHost").innerHTML=html;
+}
+function qCard(q){
+  const timeEl=editingTimeId===q.id?`<input id="activeEdit" class="timein" value="${esc(hm12(q.appt))}" placeholder="e.g. 345" onkeydown="if(event.key==='Enter')this.blur()" onblur="qSetAppt(${q.id},parseTimeInput(this.value))" style="width:92px">`:`<span class="qtime" title="click to edit time" style="cursor:pointer" onclick="editTime(${q.id})">${q.appt?esc(hm12(q.appt)):'＋ set time'}</span>`;
+  return `<div class="qitem"><div class="qtop">${timeEl}<span class="qname">${esc(q.customer)}</span>
+      <button class="btn sm grey" title="Remove" onclick="removeQueue(${q.id})">✕</button></div>
+    <div class="txwrap" style="margin-top:6px">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ treatment" onchange="qTxAdd(${q.id},this.value);this.value=''"></div>
+    <div class="qactions">${docInline(q.id,q.doctor)}<span style="flex:1"></span><button class="chip" onclick="qCheckIn(${q.id})">✓ Arrived</button></div>
+    <div class="qactions"><select onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select><select onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('Send to room ▾')}</select></div></div>`;
+}
+
+/* ---- phone views ---- */
+function renderPhone(){
+  $("notifHost").innerHTML=activeNotifs.map(n=>`<div class="notif"><span>🔔 ${esc(n.msg)}</span><button onclick="dismissNotif('${jsq(n.k)}')">OK</button></div>`).join('');
+  if(ROLE==='doctor')renderDoctorView();else renderTheraView();
+}
+function phoneTxChips(room,o){
+  const rem=txArr(o.treatment).map((x,i)=>`<span class="txchip"><span class="txname" title="tap when done" onclick="roomTxDone('${jsq(room)}',${i})">${esc(x)}</span></span>`).join('');
+  const done=txArr(o.txDone).map((x,i)=>`<span class="txchip done"><span class="txname" title="tap to undo" onclick="roomTxUndo('${jsq(room)}',${i})">${esc(x)}</span></span>`).join('');
+  return `<div class="txwrap">${rem}${done}<input class="txin" list="txListP" placeholder="+ add" onchange="roomTxAdd('${jsq(room)}',this.value);this.value=''"></div>`;}
+function renderDoctorView(){
+  const me=MYNAME;const nowM=curMin();
+  let html=`<datalist id="txListP">${state.treatments.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;
+  // waiting (arrived, assigned to me)
+  const waiting=state.queue.filter(q=>q.doctor===me&&q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
+  html+=`<div class="section-title">Arrived · waiting for you (${waiting.length})</div>`;
+  if(!waiting.length)html+=`<div class="empty">No one waiting right now.</div>`;
+  waiting.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="wmin">${wait}m</span></div>
+    <div class="pmeta">${q.appt?'Appt '+esc(hm12(q.appt))+' · ':''}arrived ${esc(hm12(q.arrivedAt))}${q.therapist?' · '+esc(q.therapist):''}</div>
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
+  // in rooms
+  const mine=allRooms().filter(r=>state.occ[r]&&state.occ[r].doctor===me);
+  html+=`<div class="section-title" style="margin-top:14px">In rooms (${mine.length})</div>`;
+  if(!mine.length)html+=`<div class="empty">No customers in rooms.</div>`;
+  mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
+    html+=`<div class="pcard${o.stage==='Waiting for doctor'?' alert':''}"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
+      <div class="pstatus ${st.cls}">${esc(st.t)}</div>
+      ${o.stage&&(oxyPos(o)||o.mask)?`<div class="pmeta">Stage: ${esc(o.stage)}</div>`:''}
+      <div class="pmeta">Tap a treatment to mark done / undo:</div>
+      ${phoneTxChips(r,o)}
+      ${o.note?`<div class="pmeta">📝 ${esc(o.note)}</div>`:''}
+    </div>`;});
+  // appointments later
+  const later=state.queue.filter(q=>q.doctor===me&&!q.arrivedAt).sort((a,b)=>(toMin(a.appt)||9999)-(toMin(b.appt)||9999));
+  html+=`<div class="section-title" style="margin-top:14px">Appointments — not arrived (${later.length})</div>`;
+  if(!later.length)html+=`<div class="empty">None.</div>`;
+  later.forEach(q=>{html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span></div>
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
+  // done today
+  const done=state.completed.filter(c=>c.doctor===me);
+  html+=`<div class="section-title" style="margin-top:14px">Done today (${done.length})</div>`;
+  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">✓ ${esc(c.at||'')} · ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
+  $("phoneHost").innerHTML=html;
+}
+function renderTheraView(){
+  const me=MYNAME;const nowM=curMin();
+  let html=`<datalist id="txListP">${state.treatments.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;
+  const mine=allRooms().filter(r=>state.occ[r]&&state.occ[r].therapist===me);
+  html+=`<div class="section-title">My rooms (${mine.length})</div>`;
+  if(!mine.length)html+=`<div class="empty">No rooms right now.</div>`;
+  mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
+    html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
+      <div class="pstatus ${st.cls}">${esc(st.t)}</div>
+      <div class="fieldrow"><label>Stage</label>${stageSel(r,o)}</div>
+      ${oxyBlock(r,o,true)||(hasOxyTx(o)?'':`<div class="pmeta"><button class="chip" onclick="roomTxAdd('${jsq(r)}','Oxy');oxyStart('${jsq(r)}')">▶ Start Oxy (adds Oxy tx)</button></div>`)}
+      ${o.mask?`<div class="fieldrow"><label>Mask off</label><div style="flex:1;padding-top:6px"><b>${esc(hm12(o.mask))}</b><span class="mstep"><button title="+1 min" onclick="maskBump('${jsq(r)}',1)">▲</button><button title="-1 min" onclick="maskBump('${jsq(r)}',-1)">▼</button></span>${maskRel(o.mask)} <button class="maskx" onclick="maskClear('${jsq(r)}')">✕</button></div></div>`:`<div class="fieldrow maskrow"><label style="width:auto">Mask</label><span class="hint">on for:</span><button class="chip" onclick="maskIn('${jsq(r)}',5)">5m</button><button class="chip" onclick="maskIn('${jsq(r)}',10)">10m</button><button class="chip" onclick="maskIn('${jsq(r)}',15)">15m</button></div>`}
+      <div class="pmeta">Treatments — tap to mark done / undo:</div>
+      ${phoneTxChips(r,o)}
+      <div class="fieldrow"><label>Note</label><input class="note-in" value="${esc(o.note||'')}" placeholder="remark…" onchange="roomSet('${jsq(r)}','note',this.value)"></div>
+    </div>`;});
+  // up next: queue assigned to me
+  const next=state.queue.filter(q=>q.therapist===me).map(q=>({q,wait:q.arrivedAt?Math.max(0,nowM-toMin(q.arrivedAt)):-1})).sort((a,b)=>b.wait-a.wait);
+  html+=`<div class="section-title" style="margin-top:14px">Assigned to me — up next (${next.length})</div>`;
+  if(!next.length)html+=`<div class="empty">No one assigned yet. The consultant assigns from the board.</div>`;
+  next.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span>${wait>=0?`<span class="wmin">${wait}m wait</span>`:`<span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span>`}</div>
+    <div class="pmeta">${q.doctor?esc(q.doctor)+' · ':''}${wait>=0?'in waiting room':'not arrived yet'}</div>
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
+  // done today
+  const done=state.completed.filter(c=>c.therapist===me);
+  html+=`<div class="section-title" style="margin-top:14px">Done today (${done.length})</div>`;
+  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">✓ ${esc(c.at||'')} · ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
+  $("phoneHost").innerHTML=html;
+}
+
+/* ===== therapist log / records (board roles) ===== */
+function therapistGroups(){
+  let g={};const add=(t,o)=>{t=t||"— (no therapist)";(g[t]=g[t]||[]).push(o);};
+  allRooms().forEach(r=>{const o=state.occ[r];if(o)add(o.therapist,{customer:o.customer,treatment:txDisp(o.treatment),status:'now',room:r});});
+  state.completed.forEach(c=>add(c.therapist,{customer:c.customer,treatment:txDisp(c.treatment),status:'done',time:c.at,room:c.room}));
+  Object.keys(g).forEach(t=>{let seen={};g[t]=g[t].filter(o=>{if(seen[o.customer]==='now')return false;if(seen[o.customer]&&o.status==='done')return false;seen[o.customer]=o.status;return true;});});
+  return g;
+}
+function openTLog(){const g=therapistGroups();const order=state.therapists.concat(Object.keys(g).filter(t=>!state.therapists.includes(t)));
+  let html="";let total=0;
+  order.forEach(t=>{const items=g[t];if(!items||!items.length)return;total+=items.length;html+=`<div class="tlog-th">${esc(t)} (${items.length})</div>`;
+    items.forEach(o=>{html+=`<div class="tlog-item">• ${esc(o.customer)}${o.treatment?' — '+esc(o.treatment):''} ${o.status==='now'?`<span class="now">[in ${esc(o.room)} now]</span>`:`<span class="done">[done ${esc(o.time||'')}]</span>`}</div>`;});});
+  if(!total)html='<div class="empty">No customers assigned to therapists yet today.</div>';
+  $("tlogBody").innerHTML=html;$("tlogModal").classList.add("show");applyRoleChrome();}
+function tlogText(){const g=therapistGroups();const order=state.therapists.concat(Object.keys(g).filter(t=>!state.therapists.includes(t)));
+  let L=["CUSTOMERS BY THERAPIST — "+nowHM(),""];order.forEach(t=>{const items=g[t];if(!items||!items.length)return;L.push(t+" ("+items.length+"):");
+    items.forEach(o=>L.push("  • "+o.customer+(o.treatment?" — "+o.treatment:"")+(o.status==='now'?" [in "+o.room+" now]":" [done "+(o.time||"")+"]")));L.push("");});return L.join("\n");}
+function copyTLog(){copyStr(tlogText());}
+function clearLog(){if(!isCounter()){toast("Only the counter PC can clear the log");return;}
+  if(confirm("Clear today's completed therapist log?")){state.completed=[];
+    if(baseRef){try{baseRef.update({completed:null});}catch(e){}}
+    saveLocal();recordHistory();render();openTLog();toast("Log cleared");}}
+function openRecords(){
+  let html=`<div class="tlog-th">Completed / Done (${state.completed.length})</div>`;
+  if(!state.completed.length)html+='<div class="hint">none yet</div>';
+  state.completed.slice().reverse().forEach(c=>{html+=`<div class="rec-item">✓ ${esc(c.at||'')} · ${esc(c.customer)}${c.doctor?' — '+esc(c.doctor):''}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}${c.therapist?' · '+esc(c.therapist):''}</div>`;});
+  html+=`<div class="tlog-th">Cancelled / Deleted (${state.removed.length})</div>`;
+  if(!state.removed.length)html+='<div class="hint">none</div>';
+  state.removed.slice().reverse().forEach(c=>{html+=`<div class="rec-item cx">✕ ${esc(c.at||'')} · ${esc(c.customer)}${c.doctor?' — '+esc(c.doctor):''}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}${c.appt?' · appt '+esc(hm12(c.appt)):''}</div>`;});
+  $("recBody").innerHTML=html;$("recModal").classList.add("show");applyRoleChrome();}
+function clearRecords(){if(!isCounter()){toast("Only the counter PC can clear records");return;}
+  if(confirm("Clear today's records (completed + cancelled)?")){state.completed=[];state.removed=[];
+    if(baseRef){try{baseRef.update({completed:null,removed:null});}catch(e){}}
+    saveLocal();recordHistory();render();openRecords();toast("Records cleared");}}
+
+function copyStr(str){if(navigator.clipboard){navigator.clipboard.writeText(str).then(()=>toast("Copied"),()=>{});}else{const ta=document.createElement('textarea');ta.value=str;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast("Copied");}catch(e){}ta.remove();}}
+
+/* ===== settings (counter only) ===== */
+function openSettings(){if(!isCounter())return;const dn=state.groups.find(g=>g.name==="Downstairs")||state.groups[0];const up=state.groups.find(g=>g.name==="Upstairs")||state.groups[1]||{rooms:[]};
+  $("setDown").value=dn.rooms.join("\n");$("setUp").value=up.rooms.join("\n");$("setDoctors").value=state.doctors.join("\n");$("setTherapists").value=state.therapists.join("\n");$("setTreatments").value=state.treatments.join("\n");
+  $("setCustomers").value=Object.entries(state.customers).map(([n,c])=>{let s=n;if(c.doctor||c.therapist)s+=" = "+(c.doctor||"");if(c.therapist)s+=" = "+c.therapist;return s;}).join("\n");$("settingsModal").classList.add("show");}
+function saveSettings(){const lines=t=>t.value.split("\n").map(x=>x.trim()).filter(Boolean);
+  const cleanRoom=x=>fbKey(x);
+  const newGroups=[{name:"Downstairs",rooms:lines($("setDown")).map(cleanRoom)},{name:"Upstairs",rooms:lines($("setUp")).map(cleanRoom)}];
+  state.doctors=lines($("setDoctors"));state.therapists=lines($("setTherapists"));state.treatments=lines($("setTreatments"));
+  const cust={};lines($("setCustomers")).forEach(l=>{const p=l.split("=").map(x=>x.trim());const nm=fbKey(p[0]);if(nm&&nm!=="_")cust[nm]={doctor:p[1]||"",therapist:p[2]||""};});state.customers=cust;
+  const newRooms=newGroups.flatMap(g=>g.rooms);const occ={};newRooms.forEach(r=>occ[r]=state.occ[r]||null);
+  const patch=listsPatch();
+  allRooms().forEach(r=>{if(!newRooms.includes(r)&&state.occ[r]){const o=state.occ[r];const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
+    state.queue.push(q);Object.assign(patch,queuePatch(q));patch["occ/"+fbKey(r)]=null;}});
+  state.groups=newGroups;state.occ=occ;
+  Object.assign(patch,{"lists/groups":state.groups});
+  newRooms.forEach(r=>{Object.assign(patch,roomPatch(r));});
+  closeModal('settingsModal');cloudPatch(patch);toast("Lists saved");}
+function closeModal(id){$(id).classList.remove("show");}
+
+/* ===== export / import (counter only) ===== */
+function exportState(){const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="room-flow-state-"+nowHM().replace(":","")+".json";a.click();toast("State saved to file");}
+function importState(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{
+    const raw=JSON.parse(r.result);
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Array.isArray(raw.queue)){
+      toast("File isn't a valid appointments file (missing the expected format) — nothing was changed");
+      ev.target.value="";return;
+    }
+    autoBackup();
+    const inc=migrate(raw);
+    inc.doctors=state.doctors;inc.therapists=state.therapists;inc.treatments=state.treatments;inc.groups=state.groups;
+    inc.customers=Object.assign({},state.customers,inc.customers||{});
+    // Occupied-room rescue: if the incoming file doesn't say who's in a room but
+    // someone is sitting there right now, send them back to the queue instead of wiping them.
+    const occ={};state.groups.forEach(g=>g.rooms.forEach(rm=>{
+      const incoming=(inc.occ&&inc.occ[rm])||null;
+      if(!incoming&&state.occ[rm]){const o=state.occ[rm];
+        inc.queue.push({id:nextId(),customer:o.customer,doctor:o.doctor||"",therapist:o.therapist||"",treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()});}
+      occ[rm]=incoming;}));
+    inc.occ=occ;
+    pushFullState(inc);toast("Appointments loaded (your lists kept; current room occupants moved to queue)");
+  }catch(e){toast("Could not read file");}};r.readAsText(f);ev.target.value="";}
+
+/* ===== role setup ===== */
+function openRoleSetup(){pendingRole=null;$("rolePick").style.display="";$("roleNameWrap").style.display="none";$("roleOverlay").classList.add("show");}
+function pickRole(role){
+  if(role==='counter'||role==='consultant'){setRole(role,"");return;}
+  pendingRole=role;$("rolePick").style.display="none";$("roleNameWrap").style.display="";
+  $("roleNameHint").textContent=role==='doctor'?"Select your name (doctor):":"Select your name (therapist):";
+  fillRoleNames();}
+function fillRoleNames(){if(!pendingRole)return;const list=pendingRole==='doctor'?state.doctors:state.therapists;
+  $("roleNameSel").innerHTML=list.map(n=>`<option>${esc(n)}</option>`).join('')||'<option value="">(list is empty — counter must add names in Edit lists)</option>';}
+function confirmRole(){const n=$("roleNameSel").value;if(!n){toast("No name selected");return;}setRole(pendingRole,n);}
+function setRole(role,name){ROLE=role;MYNAME=name;pendingRole=null;
+  try{localStorage.setItem(LS_ROLE,JSON.stringify({role,name}));}catch(e){}
+  notifReady=false;seenAlerts={};activeNotifs=[];
+  closeModal('roleOverlay');applyRoleChrome();render();
+  setTimeout(()=>{scanAlerts();notifReady=true;},1500);
+  toast(role==='counter'?"Counter PC mode":role==='consultant'?"Consultant mode":(name+" — "+role));}
+
+/* ===== cloud connect / auth / migration ===== */
+function setSync(t,cls){const e=$("syncst");if(e){e.textContent=t;e.className="syncst"+(cls?" "+cls:"");}}
+function connectCloud(){
+  if(baseRef)return;db=firebase.database();baseRef=db.ref(BASE_PATH);cloudOn=true;
+  baseRef.once('value').then(s=>{
+    if(s.val()==null){
+      // First run on v2: migrate the old single-blob board if it exists.
+      db.ref(OLD_PATH).once('value').then(os=>{
+        let st=null;try{if(typeof os.val()==='string')st=migrate(JSON.parse(os.val()));}catch(e){}
+        pushFullState(st||state);attachListeners();
+      }).catch(()=>{pushFullState(state);attachListeners();});
+    } else attachListeners();
+  }).catch(()=>{attachListeners();});
+}
+function attachListeners(){
+  baseRef.child('lists').on('value',s=>applyLists(s.val()));
+  baseRef.child('occ').on('value',s=>applyOcc(s.val()));
+  baseRef.child('queue').on('value',s=>applyQueue(s.val()));
+  baseRef.child('completed').on('value',s=>applyRecs('completed',s.val()));
+  baseRef.child('removed').on('value',s=>applyRecs('removed',s.val()));
+  setTimeout(()=>{notifReady=true;},2500);
+}
+function doLogin(){let u=$("loginEmail").value.trim();const p=$("loginPwd").value;if(!u||!p){$("loginErr").textContent="Enter username and password.";return;}
+  const e=u.indexOf('@')>-1?u:u+'@'+LOGIN_DOMAIN;
+  $("loginErr").textContent="Signing in…";
+  firebase.auth().signInWithEmailAndPassword(e,p).catch(err=>{$("loginErr").textContent=(err&&err.message)||"Sign-in failed";});}
+function doLogout(){if(window.firebase&&firebase.auth)firebase.auth().signOut();}
+function initCloud(){
+  if(!FIREBASE_CONFIG||!window.firebase){afterAuth();return;}
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firebase.auth().onAuthStateChanged(function(user){
+      if(user){baseRef=null;connectCloud();$("loginOverlay").classList.remove("show");$("logoutBtn").style.display='';setSync('☁ synced','cloud');$("loginPwd").value="";afterAuth();}
+      else{if(baseRef){baseRef.off();baseRef.child&&['lists','occ','queue','completed','removed'].forEach(c=>{try{baseRef.child(c).off();}catch(e){}});baseRef=null;}cloudOn=false;$("loginOverlay").classList.add("show");$("logoutBtn").style.display='none';setSync('login required','err');}
+    });
+  }catch(e){setSync('cloud error','err');afterAuth();}
+}
+function afterAuth(){
+  if(!ROLE)openRoleSetup();
+  applyRoleChrome();render();
+}
+
+/* ===== boot ===== */
+function tick(){$("clock").textContent=nowHM();if(!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))render();}
+$("arriveName").addEventListener("keydown",e=>{if(e.key==="Enter")arrive();});
+document.addEventListener("click",e=>{const m=$("moreMenu");if(m&&m.classList.contains("show")&&!e.target.closest(".menu-wrap"))m.classList.remove("show");});
+$("clock").textContent=nowHM();histLast=JSON.stringify(state);updateUndoBtn();
+if(FIREBASE_CONFIG&&window.firebase){$("loginOverlay").classList.add("show");}
+applyRoleChrome();render();
+initCloud();
+setInterval(()=>{$("clock").textContent=nowHM();},1000);
+setInterval(tick,20000);
+autoBackup();setInterval(autoBackup,600000);
+</script>
+</body>
+</html>
