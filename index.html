@@ -179,6 +179,22 @@
   .rolebtns{display:flex;flex-direction:column;gap:8px}
   .rolebtns button{padding:13px;font-size:15px;font-weight:800;border:1px solid var(--line);border-radius:9px;background:#fbfdfd;cursor:pointer;text-align:left}
   .rolebtns button:hover{background:#e9f0f1;border-color:var(--accent)}
+  /* ===== v2.1 phone polish ===== */
+  @media(max-width:640px){input,select,.timein,.txin{font-size:16px}}
+  body.phoneui header{padding:6px 10px;gap:7px}
+  body.phoneui header h1{font-size:15px}
+  body.phoneui .logo{display:none}
+  body.phoneui #clock{font-size:14px;padding:2px 8px}
+  body.phoneui .syncst{font-size:10px}
+  body.phoneui main{padding:10px}
+  .oxyctl.big{gap:8px}
+  .oxyctl.big .chip{padding:12px 16px;font-size:16px;border-radius:12px}
+  .oxyctl.big select{font-size:16px;padding:10px;border-radius:10px}
+  .oxyctl.big .maskx{font-size:16px;padding:6px 10px}
+  .chip.bigstart{padding:12px 18px;font-size:16px;border-radius:12px}
+  body.phoneui .maskrow .chip,.pcard .maskrow .chip{padding:9px 14px;font-size:15px}
+  .stagechips{display:flex;flex-wrap:wrap;gap:6px}
+  .stagechips .chip{padding:9px 12px;font-size:14px}
 </style>
 </head>
 <body>
@@ -331,7 +347,8 @@ const SEED={
 };
 const OXY_STEPS=[["Crystal Hydrosuction",5],["Derma Ultrasonic",5],["Bipolar Frequency",5],["Oxyinfusion",5],["Cool Lift",5]];
 const OXY_MASK_MIN=15;
-const STAGES=["Preparing","Washed · waiting","Numbing","Waiting for doctor","With doctor","Treatment ongoing","Mask on","Done soon"];
+const STAGES=["Washed · waiting","Numbing","Waiting for doctor","With doctor","Treatment ongoing","Mask on"];
+const STAGES_TAP=["Washed · waiting","Numbing","Waiting for doctor","With doctor"];
 
 let state=migrate(load())||freshState();
 let filterWindow=(localStorage.getItem(LS_FILTER)??"1")==="1";
@@ -424,8 +441,8 @@ function applyRecs(which,v){state[which]=Object.values(v||{}).filter(Boolean).ma
 function scanAlerts(){
   if(ROLE!=='doctor'||!MYNAME)return;
   const found=[];
-  state.queue.forEach(q=>{if(q.doctor===MYNAME&&q.arrivedAt)found.push({k:"q"+q.id,msg:q.customer+" has arrived · waiting"});});
-  allRooms().forEach(r=>{const o=state.occ[r];if(o&&o.doctor===MYNAME&&o.stage==="Waiting for doctor")found.push({k:"r"+r+"|"+o.customer,msg:o.customer+" — waiting for you in "+r});});
+  state.queue.forEach(q=>{if(sameName(q.doctor,MYNAME)&&q.arrivedAt)found.push({k:"q"+q.id,msg:q.customer+" has arrived · waiting"});});
+  allRooms().forEach(r=>{const o=state.occ[r];if(o&&sameName(o.doctor,MYNAME)&&o.stage==="Waiting for doctor")found.push({k:"r"+r+"|"+o.customer,msg:o.customer+" — waiting for you in "+r});});
   if(!notifReady){found.forEach(f=>seenAlerts[f.k]=1);return;}
   found.forEach(f=>{if(!seenAlerts[f.k]){seenAlerts[f.k]=1;activeNotifs.push(f);beep();try{navigator.vibrate&&navigator.vibrate([180,90,180]);}catch(e){}}});
 }
@@ -475,16 +492,17 @@ function isCounter(){return ROLE==='counter';}
 function isBoardRole(){return ROLE==='counter'||ROLE==='consultant';}
 
 /* ===== queue & room actions ===== */
-function arrive(){const name=fbKey($("arriveName").value.trim());if(!name||name==="_"){toast("Type a name first");return;}
-  const doc=$("arriveDoc").value;
+function addToQueue(nameRaw,doc,timeRaw,txRaw){const name=fbKey(String(nameRaw||"").trim());if(!name||name==="_"){toast("Type a name first");return false;}
   if(!state.customers[name])state.customers[name]={doctor:"",therapist:""};
   if(doc)state.customers[name].doctor=doc;
   const c=state.customers[name];
-  const txs=$("arriveTx").value.split(",").map(s=>s.trim()).filter(Boolean);
-  const q={id:nextId(),customer:name,doctor:doc||c.doctor||"",therapist:c.therapist||"",treatment:txs,appt:parseTimeInput($("arriveTime").value),arrivedAt:""};
+  const txs=String(txRaw||"").split(",").map(s=>s.trim()).filter(Boolean);
+  const q={id:nextId(),customer:name,doctor:doc||c.doctor||"",therapist:c.therapist||"",treatment:txs,appt:parseTimeInput(timeRaw),arrivedAt:""};
   state.queue.push(q);
-  $("arriveName").value="";$("arriveTx").value="";$("arriveDoc").value="";$("arriveTime").value="";
-  cloudPatch(Object.assign(queuePatch(q),custPatch(name)));}
+  cloudPatch(Object.assign(queuePatch(q),custPatch(name)));return true;}
+function arrive(){
+  if(addToQueue($("arriveName").value,$("arriveDoc").value,$("arriveTime").value,$("arriveTx").value)){
+    $("arriveName").value="";$("arriveTx").value="";$("arriveDoc").value="";$("arriveTime").value="";}}
 function setCustDoc(name,v){if(!name)return null;state.customers[name]=state.customers[name]||{doctor:"",therapist:""};state.customers[name].doctor=v;return custPatch(name);}
 function setCustThera(name,v){if(!name)return null;state.customers[name]=state.customers[name]||{doctor:"",therapist:""};state.customers[name].therapist=v;return custPatch(name);}
 function qSetDoctor(id,v){const q=state.queue.find(x=>x.id==id);if(q){q.doctor=v;const cp=setCustDoc(q.customer,v);editingDocId=null;cloudPatch(Object.assign(queuePatch(q),cp||{}));}}
@@ -546,58 +564,69 @@ function resetBoard(){if(!isCounter())return;if(!confirm("Reset the board to emp
 function hasOxyTx(o){return txArr(o.treatment).concat(txArr(o.txDone)).some(t=>/oxy/i.test(t));}
 function oxyPos(o){const x=o&&o.oxy;if(!x)return null;
   const now=x.paused?(x.pausedAt||Date.now()):Date.now();
-  let el=Math.max(0,(now-x.ts)/60000);let i=x.idx||0;
-  while(i<OXY_STEPS.length&&el>=OXY_STEPS[i][1]){el-=OXY_STEPS[i][1];i++;}
-  if(i>=OXY_STEPS.length)return {i:OXY_STEPS.length,rem:0,fin:true};
-  return {i,rem:Math.max(0,Math.ceil(OXY_STEPS[i][1]-el)),fin:false};}
+  let el=Math.max(0,(now-x.ts)/1000);let i=x.idx||0;
+  while(i<OXY_STEPS.length&&el>=OXY_STEPS[i][1]*60){el-=OXY_STEPS[i][1]*60;i++;}
+  if(i>=OXY_STEPS.length)return {i:OXY_STEPS.length,remS:0,fin:true};
+  return {i,remS:Math.max(0,Math.ceil(OXY_STEPS[i][1]*60-el)),fin:false};}
+function fmtRem(s){return Math.floor(s/60)+":"+pad(Math.floor(s%60));}
+function oxyLabel(p){const i=Math.min(p.i,OXY_STEPS.length-1);return "Oxy "+(i+1)+"/5 \u00b7 "+OXY_STEPS[i][0];}
 function oxyStart(room){const o=state.occ[room];if(!o)return;o.oxy={idx:0,ts:Date.now(),paused:false,pausedAt:0};
-  if(!o.stage||o.stage==="Preparing"||o.stage==="Washed · waiting")o.stage="Treatment ongoing";commitRoom(room);}
+  if(!o.stage||o.stage==="Washed \u00b7 waiting")o.stage="Treatment ongoing";commitRoom(room);}
 function oxyNext(room){const o=state.occ[room];if(!o||!o.oxy)return;const p=oxyPos(o);
   o.oxy={idx:Math.min(p.i+1,OXY_STEPS.length),ts:Date.now(),paused:false,pausedAt:0};commitRoom(room);}
 function oxyJump(room,i){const o=state.occ[room];if(!o)return;i=parseInt(i,10);if(isNaN(i))return;
+  if(!o.oxy)o.oxy={idx:0,ts:Date.now(),paused:false,pausedAt:0};
   o.oxy={idx:i,ts:Date.now(),paused:false,pausedAt:0};
-  if(!o.stage||/waiting|doctor/i.test(o.stage)===false)o.stage="Treatment ongoing";commitRoom(room);}
+  o.stage="Treatment ongoing";commitRoom(room);}
 function oxyPause(room){const o=state.occ[room];if(!o||!o.oxy)return;const x=o.oxy;
   if(x.paused){x.ts+=Date.now()-(x.pausedAt||Date.now());x.paused=false;x.pausedAt=0;}
   else{x.paused=true;x.pausedAt=Date.now();}
   commitRoom(room);}
-function oxyBump(room,mins){const o=state.occ[room];if(!o||!o.oxy)return;o.oxy.ts+=mins*60000;
-  if(o.oxy.ts>Date.now())o.oxy.ts=Date.now();commitRoom(room);}
-function oxyEnd(room){const o=state.occ[room];if(!o)return;o.oxy=null;commitRoom(room);}
+function oxyEnd(room){const o=state.occ[room];if(!o)return;o.oxy=null;editingOxyRoom=null;commitRoom(room);}
 function oxyFinishToMask(room){const o=state.occ[room];if(!o)return;
-  o.oxy=null;
+  o.oxy=null;editingOxyRoom=null;
   o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);
   for(let i=o.treatment.length-1;i>=0;i--){if(/^oxy/i.test(o.treatment[i])){o.txDone.push(o.treatment.splice(i,1)[0]);}}
   o.stage="Mask on";
   let m=(curMin()+OXY_MASK_MIN)%1440;o.mask=pad(Math.floor(m/60))+":"+pad(m%60);
   commitRoom(room);}
-function oxyDots(i){let s="";for(let k=0;k<OXY_STEPS.length;k++)s+=`<span class="${k<i?'on':(k===i?'on':'off')}">${k<i?'●':(k===i?'◉':'○')}</span>`;return `<span class="oxydots">${s}</span>`;}
-function oxyBlock(room,o,editable){
-  const p=oxyPos(o);
+function oxyDots(i){let s="";for(let k=0;k<OXY_STEPS.length;k++)s+=`<span class="${k<i?'on':(k===i?'on':'off')}">${k<i?'\u25cf':(k===i?'\u25c9':'\u25cb')}</span>`;return `<span class="oxydots">${s}</span>`;}
+let editingOxyRoom=null;
+function oxyToggleEdit(room){editingOxyRoom=editingOxyRoom===room?null:room;render();}
+function oxyCtlRow(room,o,big){return `<div class="oxyctl${big?' big':''}">
+      <button class="chip go" onclick="oxyNext('${jsq(room)}')">\u2713 Done \u2192 next</button>
+      <button class="chip" onclick="oxyPause('${jsq(room)}')">${o.oxy.paused?'\u25b6 Resume':'\u23f8 Pause'}</button>
+      <select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">jump to\u2026</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select>
+      <button class="maskx" title="cancel Oxy tracking" onclick="oxyEnd('${jsq(room)}')">\u2715</button>
+    </div>`;}
+function oxyBlock(room,o,mode){ // mode: 'phone' (big controls) | 'board' (minimised, therapist drives it)
+  const p=oxyPos(o);const phone=mode==='phone';
   if(!p){
-    if(!editable)return "";
-    if(hasOxyTx(o))return `<div class="fieldrow"><label>Oxy</label><div style="padding-top:3px"><button class="chip go" onclick="oxyStart('${jsq(room)}')">▶ Start Oxy steps</button></div></div>`;
+    if(hasOxyTx(o))return `<div class="fieldrow"><label>Oxy</label><div style="padding-top:3px"><button class="chip go${phone?' bigstart':''}" onclick="oxyStart('${jsq(room)}')">\u25b6 Start Oxy steps</button></div></div>`;
     return "";}
   if(p.fin){
-    return `<div class="oxybox"><div class="oxyline">${oxyDots(5)} Steps done ✓</div>
-      ${editable?`<div class="oxyctl"><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">▶ Start mask ${OXY_MASK_MIN}m</button><button class="chip" onclick="oxyEnd('${jsq(room)}')">End without mask</button><select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">↩ redo step…</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select></div>`:''}
+    return `<div class="oxybox"><div class="oxyline">${oxyDots(5)} <span data-oxyl="${esc(room)}">Steps done \u2713</span></div>
+      <div class="oxyctl${phone?' big':''}"><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">\u25b6 Start mask ${OXY_MASK_MIN}m</button><button class="chip" onclick="oxyEnd('${jsq(room)}')">End without mask</button><select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">\u21a9 redo step\u2026</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select></div>
     </div>`;}
-  const nm=OXY_STEPS[p.i][0];
-  const remCls=p.rem<=1?'over':(p.rem<=2?'soon':'');
-  return `<div class="oxybox${o.oxy.paused?' paused':''}"><div class="oxyline">${oxyDots(p.i)} <span>Oxy ${p.i+1}/5 · ${esc(nm)}</span> ${o.oxy.paused?'<span class="oxyrem">⏸ paused</span>':`<span class="oxyrem ${remCls}">~${p.rem}m left</span>`}</div>
-    ${editable?`<div class="oxyctl">
-      <button class="chip go" onclick="oxyNext('${jsq(room)}')">✓ Done → next</button>
-      <button class="chip" onclick="oxyPause('${jsq(room)}')">${o.oxy.paused?'▶ Resume':'⏸ Pause'}</button>
-      <button class="chip" onclick="oxyBump('${jsq(room)}',5)">+5m</button>
-      <select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">jump to…</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select>
-      <button class="maskx" title="cancel Oxy tracking" onclick="oxyEnd('${jsq(room)}')">✕</button>
-    </div>`:''}
-  </div>`;}
+  const remHtml=o.oxy.paused?'<span class="oxyrem">\u23f8 paused</span>':`<span class="oxyrem${p.remS<=60?' over':(p.remS<=120?' soon':'')}" data-oxyt="${esc(room)}">~${fmtRem(p.remS)} left</span>`;
+  const line=`<div class="oxyline">${oxyDots(p.i)} <span data-oxyl="${esc(room)}">${esc(oxyLabel(p))}</span> ${remHtml}</div>`;
+  if(phone)return `<div class="oxybox${o.oxy.paused?' paused':''}">${line}${oxyCtlRow(room,o,true)}</div>`;
+  const open=editingOxyRoom===room;
+  return `<div class="oxybox${o.oxy.paused?' paused':''}"><div style="display:flex;align-items:center;gap:6px">${line}<span style="flex:1"></span><button class="docedit" title="adjust Oxy (normally the therapist does this from her phone)" onclick="oxyToggleEdit('${jsq(room)}')">${open?'\u25be':'\u270e'}</button></div>${open?oxyCtlRow(room,o,false):''}</div>`;}
 function statusFor(o){const p=oxyPos(o);
-  if(p){if(p.fin)return {t:"Oxy steps done — mask next",cls:""};
-    return {t:"Oxy "+(p.i+1)+"/5 · "+OXY_STEPS[p.i][0]+(o.oxy.paused?" · ⏸ paused":" · ~"+p.rem+"m left"),cls:""};}
-  if(o.mask){const d=toMin(o.mask)-curMin();return d<0?{t:"MASK OVERDUE "+(-d)+"m",cls:"mo"}:{t:"Mask off "+hm12(o.mask)+" · in "+d+"m",cls:""};}
+  if(p){if(p.fin)return {t:"Oxy steps done \u2014 mask next",cls:""};
+    return {t:oxyLabel(p)+(o.oxy.paused?" \u00b7 \u23f8 paused":" \u00b7 ~"+fmtRem(p.remS)+" left"),cls:""};}
+  if(o.mask){const d=toMin(o.mask)-curMin();return d<0?{t:"MASK OVERDUE "+(-d)+"m",cls:"mo"}:{t:"Mask off "+hm12(o.mask)+" \u00b7 in "+d+"m",cls:""};}
   return {t:o.stage||"In room",cls:""};}
+function cssEsc(s){return (window.CSS&&CSS.escape)?CSS.escape(s):String(s).replace(/"/g,'\\"');}
+function refreshTimers(){try{
+  allRooms().forEach(r=>{const o=state.occ[r];if(!o)return;const p=oxyPos(o);
+    if(p&&!p.fin&&o.oxy&&!o.oxy.paused){
+      document.querySelectorAll(`[data-oxyt="${cssEsc(r)}"]`).forEach(el=>{el.textContent="~"+fmtRem(p.remS)+" left";});
+      document.querySelectorAll(`[data-oxyl="${cssEsc(r)}"]`).forEach(el=>{el.textContent=oxyLabel(p);});}
+    document.querySelectorAll(`[data-oxys="${cssEsc(r)}"]`).forEach(el=>{const st=statusFor(o);el.textContent=st.t;});
+  });}catch(e){}}
+function sameName(a,b){return String(a||"").trim().toLowerCase()===String(b||"").trim().toLowerCase();}
 
 /* ===== undo (board roles) ===== */
 function updateUndoBtn(){const b=$("undoBtn");if(!b)return;const n=undoStack.length;b.disabled=!n;b.textContent="↶ Undo"+(n?" ("+n+")":"");}
@@ -618,21 +647,23 @@ function maskRel(hm){if(!hm)return"";const m=toMin(hm);if(m==null)return"";let d
 function maskClass(o){if(!o.mask)return"";const d=toMin(o.mask)-curMin();if(d<0)return" maskOver";if(d<=5)return" maskSoon";return"";}
 function docInline(id,doc){return editingDocId===id?`<select id="activeEdit" onblur="cancelEdit()" onchange="qSetDoctor(${id},this.value)" style="flex:1">${docOptions(doc)}</select>`:`<span class="docline">${esc(doc)||'no doctor'}</span><button class="docedit" title="change doctor" onclick="editDoc(${id})">✎</button>`;}
 
+function usePhoneUI(){return ROLE==='doctor'||ROLE==='therapist'||(ROLE==='consultant'&&window.innerWidth<=820);}
+function syncMainVis(){const ph=usePhoneUI();$("boardMain").style.display=ph?"none":"";$("phoneMain").style.display=ph?"":"none";document.body.classList.toggle('phoneui',ph);}
 function render(){
   if(!ROLE)return;
-  if(isBoardRole())renderBoard();else renderPhone();
+  syncMainVis();
+  if(usePhoneUI())renderPhone();else renderBoard();
 }
 function applyRoleChrome(){
-  const board=isBoardRole();
-  $("boardMain").style.display=board?"":"none";
-  $("phoneMain").style.display=board?"none":"";
-  document.querySelectorAll(".boardOnly").forEach(el=>el.style.display=board?"":"none");
+  const ph=usePhoneUI();const board=isBoardRole();
+  syncMainVis();
+  document.querySelectorAll(".boardOnly").forEach(el=>el.style.display=(board&&!ph)?"":"none");
   document.querySelectorAll(".counterOnly").forEach(el=>el.style.display=isCounter()?"":"none");
-  document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=board?"":"none");
-  $("logoutBtnPhone").style.display=(!board&&cloudOn)?"":"none";
+  document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=(board&&!ph)?"":"none");
+  $("logoutBtnPhone").style.display=(ph&&cloudOn)?"":"none";
   const chip=$("roleChip");
-  if(ROLE){chip.style.display="";const icon={counter:"🖥",consultant:"🧭",doctor:"🩺",therapist:"💆"}[ROLE]||"";
-    chip.textContent=icon+" "+(MYNAME||ROLE)+" ⇄";}
+  if(ROLE){chip.style.display="";const icon={counter:"\ud83d\udda5",consultant:"\ud83e\udded",doctor:"\ud83e\ude7a",therapist:"\ud83d\udc86"}[ROLE]||"";
+    chip.textContent=icon+" "+(MYNAME||ROLE)+" \u21c4";}
   else chip.style.display="none";
 }
 
@@ -670,7 +701,7 @@ function roomCard(room){
       <div class="fieldrow"><label>Stage</label>${stageSel(room,o)}</div>
       <div class="fieldrow"><label>Tx</label><div class="txwrap">${remChips}<input class="txin" list="txList" placeholder="+ add" onchange="roomTxAdd('${jsq(room)}',this.value);this.value=''"></div></div>
       ${doneChips?`<div class="fieldrow"><label>Done</label><div class="txwrap">${doneChips}</div></div>`:''}
-      ${oxyBlock(room,o,true)}
+      ${oxyBlock(room,o,'board')}
       ${o.mask?`<div class="fieldrow"><label>Mask off</label><div style="flex:1;padding-top:6px"><b>${esc(hm12(o.mask))}</b><span class="mstep"><button title="+1 min" onclick="maskBump('${jsq(room)}',1)">▲</button><button title="-1 min" onclick="maskBump('${jsq(room)}',-1)">▼</button></span>${maskRel(o.mask)} <button class="maskx" title="clear mask-off time" onclick="maskClear('${jsq(room)}')">✕</button></div></div>`:`<div class="fieldrow maskrow"><label style="width:auto">Mask</label><span class="hint">on for:</span><button class="chip" onclick="maskIn('${jsq(room)}',5)">5m</button><button class="chip" onclick="maskIn('${jsq(room)}',10)">10m</button><button class="chip" onclick="maskIn('${jsq(room)}',15)">15m</button><span class="maskbreak"></span><span class="mhidden">Mask</span><span class="hint mhidden">on for:</span><input class="timein" title="exact time" placeholder="e.g. 345" onchange="roomSet('${jsq(room)}','mask',parseTimeInput(this.value))"></div>`}
       <div class="fieldrow"><label>Note</label><input class="note-in" value="${esc(o.note||'')}" placeholder="remark for this room…" onchange="roomSet('${jsq(room)}','note',this.value)"></div>
       <div class="fieldrow"><label>Next →</label><select onchange="roomSetNext('${jsq(room)}',this.value)">${nextOpts}</select></div>
@@ -725,74 +756,115 @@ function qCard(q){
 
 /* ---- phone views ---- */
 function renderPhone(){
-  $("notifHost").innerHTML=activeNotifs.map(n=>`<div class="notif"><span>🔔 ${esc(n.msg)}</span><button onclick="dismissNotif('${jsq(n.k)}')">OK</button></div>`).join('');
-  if(ROLE==='doctor')renderDoctorView();else renderTheraView();
+  $("notifHost").innerHTML=activeNotifs.map(n=>`<div class="notif"><span>\ud83d\udd14 ${esc(n.msg)}</span><button onclick="dismissNotif('${jsq(n.k)}')">OK</button></div>`).join('');
+  if(ROLE==='doctor')renderDoctorView();else if(ROLE==='therapist')renderTheraView();else renderConsultantPhone();
 }
 function phoneTxChips(room,o){
   const rem=txArr(o.treatment).map((x,i)=>`<span class="txchip"><span class="txname" title="tap when done" onclick="roomTxDone('${jsq(room)}',${i})">${esc(x)}</span></span>`).join('');
   const done=txArr(o.txDone).map((x,i)=>`<span class="txchip done"><span class="txname" title="tap to undo" onclick="roomTxUndo('${jsq(room)}',${i})">${esc(x)}</span></span>`).join('');
   return `<div class="txwrap">${rem}${done}<input class="txin" list="txListP" placeholder="+ add" onchange="roomTxAdd('${jsq(room)}',this.value);this.value=''"></div>`;}
+function stageChipsRow(room,o){
+  return `<div class="stagechips">${STAGES_TAP.map(s=>`<button class="chip${o.stage===s?' go':''}" onclick="roomSet('${jsq(room)}','stage','${jsq(o.stage===s?'':s)}')">${esc(s)}</button>`).join('')}</div>`;}
+function txListP(){return `<datalist id="txListP">${state.treatments.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;}
+
 function renderDoctorView(){
   const me=MYNAME;const nowM=curMin();
-  let html=`<datalist id="txListP">${state.treatments.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;
-  // waiting (arrived, assigned to me)
-  const waiting=state.queue.filter(q=>q.doctor===me&&q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
-  html+=`<div class="section-title">Arrived · waiting for you (${waiting.length})</div>`;
+  let html=txListP();
+  const waiting=state.queue.filter(q=>sameName(q.doctor,me)&&q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
+  html+=`<div class="section-title">Arrived \u00b7 waiting for you (${waiting.length})</div>`;
   if(!waiting.length)html+=`<div class="empty">No one waiting right now.</div>`;
   waiting.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="wmin">${wait}m</span></div>
-    <div class="pmeta">${q.appt?'Appt '+esc(hm12(q.appt))+' · ':''}arrived ${esc(hm12(q.arrivedAt))}${q.therapist?' · '+esc(q.therapist):''}</div>
+    <div class="pmeta">${q.appt?'Appt '+esc(hm12(q.appt))+' \u00b7 ':''}arrived ${esc(hm12(q.arrivedAt))}${q.therapist?' \u00b7 '+esc(q.therapist):''}</div>
     <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
-  // in rooms
-  const mine=allRooms().filter(r=>state.occ[r]&&state.occ[r].doctor===me);
+  const mine=allRooms().filter(r=>state.occ[r]&&sameName(state.occ[r].doctor,me));
   html+=`<div class="section-title" style="margin-top:14px">In rooms (${mine.length})</div>`;
   if(!mine.length)html+=`<div class="empty">No customers in rooms.</div>`;
   mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
     html+=`<div class="pcard${o.stage==='Waiting for doctor'?' alert':''}"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
-      <div class="pstatus ${st.cls}">${esc(st.t)}</div>
+      <div class="pstatus ${st.cls}" data-oxys="${esc(r)}">${esc(st.t)}</div>
       ${o.stage&&(oxyPos(o)||o.mask)?`<div class="pmeta">Stage: ${esc(o.stage)}</div>`:''}
       <div class="pmeta">Tap a treatment to mark done / undo:</div>
       ${phoneTxChips(r,o)}
-      ${o.note?`<div class="pmeta">📝 ${esc(o.note)}</div>`:''}
+      ${o.note?`<div class="pmeta">\ud83d\udcdd ${esc(o.note)}</div>`:''}
     </div>`;});
-  // appointments later
-  const later=state.queue.filter(q=>q.doctor===me&&!q.arrivedAt).sort((a,b)=>(toMin(a.appt)||9999)-(toMin(b.appt)||9999));
-  html+=`<div class="section-title" style="margin-top:14px">Appointments — not arrived (${later.length})</div>`;
+  const later=state.queue.filter(q=>sameName(q.doctor,me)&&!q.arrivedAt).sort((a,b)=>(toMin(a.appt)||9999)-(toMin(b.appt)||9999));
+  html+=`<div class="section-title" style="margin-top:14px">Appointments \u2014 not arrived (${later.length})</div>`;
   if(!later.length)html+=`<div class="empty">None.</div>`;
   later.forEach(q=>{html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span></div>
     <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
-  // done today
-  const done=state.completed.filter(c=>c.doctor===me);
+  const done=state.completed.filter(c=>sameName(c.doctor,me));
   html+=`<div class="section-title" style="margin-top:14px">Done today (${done.length})</div>`;
-  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">✓ ${esc(c.at||'')} · ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
+  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">\u2713 ${esc(c.at||'')} \u00b7 ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
   $("phoneHost").innerHTML=html;
 }
+
 function renderTheraView(){
   const me=MYNAME;const nowM=curMin();
-  let html=`<datalist id="txListP">${state.treatments.map(t=>`<option value="${esc(t)}">`).join('')}</datalist>`;
-  const mine=allRooms().filter(r=>state.occ[r]&&state.occ[r].therapist===me);
+  let html=txListP();
+  const mine=allRooms().filter(r=>state.occ[r]&&sameName(state.occ[r].therapist,me));
   html+=`<div class="section-title">My rooms (${mine.length})</div>`;
   if(!mine.length)html+=`<div class="empty">No rooms right now.</div>`;
   mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
     html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
-      <div class="pstatus ${st.cls}">${esc(st.t)}</div>
-      <div class="fieldrow"><label>Stage</label>${stageSel(r,o)}</div>
-      ${oxyBlock(r,o,true)||(hasOxyTx(o)?'':`<div class="pmeta"><button class="chip" onclick="roomTxAdd('${jsq(r)}','Oxy');oxyStart('${jsq(r)}')">▶ Start Oxy (adds Oxy tx)</button></div>`)}
-      ${o.mask?`<div class="fieldrow"><label>Mask off</label><div style="flex:1;padding-top:6px"><b>${esc(hm12(o.mask))}</b><span class="mstep"><button title="+1 min" onclick="maskBump('${jsq(r)}',1)">▲</button><button title="-1 min" onclick="maskBump('${jsq(r)}',-1)">▼</button></span>${maskRel(o.mask)} <button class="maskx" onclick="maskClear('${jsq(r)}')">✕</button></div></div>`:`<div class="fieldrow maskrow"><label style="width:auto">Mask</label><span class="hint">on for:</span><button class="chip" onclick="maskIn('${jsq(r)}',5)">5m</button><button class="chip" onclick="maskIn('${jsq(r)}',10)">10m</button><button class="chip" onclick="maskIn('${jsq(r)}',15)">15m</button></div>`}
-      <div class="pmeta">Treatments — tap to mark done / undo:</div>
+      <div class="pstatus ${st.cls}" data-oxys="${esc(r)}">${esc(st.t)}</div>
+      ${stageChipsRow(r,o)}
+      ${oxyBlock(r,o,'phone')||(hasOxyTx(o)?'':`<div class="pmeta"><button class="chip bigstart" onclick="roomTxAdd('${jsq(r)}','Oxy');oxyStart('${jsq(r)}')">\u25b6 Start Oxy (adds Oxy tx)</button></div>`)}
+      ${o.mask?`<div class="fieldrow"><label>Mask off</label><div style="flex:1;padding-top:6px"><b>${esc(hm12(o.mask))}</b><span class="mstep"><button title="+1 min" onclick="maskBump('${jsq(r)}',1)">\u25b2</button><button title="-1 min" onclick="maskBump('${jsq(r)}',-1)">\u25bc</button></span>${maskRel(o.mask)} <button class="maskx" onclick="maskClear('${jsq(r)}')">\u2715</button></div></div>`:`<div class="fieldrow maskrow"><label style="width:auto">Mask</label><span class="hint">on for:</span><button class="chip" onclick="maskIn('${jsq(r)}',5)">5m</button><button class="chip" onclick="maskIn('${jsq(r)}',10)">10m</button><button class="chip" onclick="maskIn('${jsq(r)}',15)">15m</button></div>`}
+      <div class="pmeta">Treatments \u2014 tap to mark done / undo:</div>
       ${phoneTxChips(r,o)}
-      <div class="fieldrow"><label>Note</label><input class="note-in" value="${esc(o.note||'')}" placeholder="remark…" onchange="roomSet('${jsq(r)}','note',this.value)"></div>
+      <div class="fieldrow"><label>Note</label><input class="note-in" value="${esc(o.note||'')}" placeholder="remark\u2026" onchange="roomSet('${jsq(r)}','note',this.value)"></div>
     </div>`;});
-  // up next: queue assigned to me
-  const next=state.queue.filter(q=>q.therapist===me).map(q=>({q,wait:q.arrivedAt?Math.max(0,nowM-toMin(q.arrivedAt)):-1})).sort((a,b)=>b.wait-a.wait);
-  html+=`<div class="section-title" style="margin-top:14px">Assigned to me — up next (${next.length})</div>`;
+  const next=state.queue.filter(q=>sameName(q.therapist,me)).map(q=>({q,wait:q.arrivedAt?Math.max(0,nowM-toMin(q.arrivedAt)):-1})).sort((a,b)=>b.wait-a.wait);
+  html+=`<div class="section-title" style="margin-top:14px">Assigned to me \u2014 up next (${next.length})</div>`;
   if(!next.length)html+=`<div class="empty">No one assigned yet. The consultant assigns from the board.</div>`;
   next.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span>${wait>=0?`<span class="wmin">${wait}m wait</span>`:`<span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span>`}</div>
-    <div class="pmeta">${q.doctor?esc(q.doctor)+' · ':''}${wait>=0?'in waiting room':'not arrived yet'}</div>
+    <div class="pmeta">${q.doctor?esc(q.doctor)+' \u00b7 ':''}${wait>=0?'in waiting room':'not arrived yet'}</div>
     <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
-  // done today
-  const done=state.completed.filter(c=>c.therapist===me);
+  const done=state.completed.filter(c=>sameName(c.therapist,me));
   html+=`<div class="section-title" style="margin-top:14px">Done today (${done.length})</div>`;
-  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">✓ ${esc(c.at||'')} · ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
+  done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">\u2713 ${esc(c.at||'')} \u00b7 ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
+  $("phoneHost").innerHTML=html;
+}
+
+function arriveP(){
+  if(addToQueue($("cName").value,$("cDoc").value,$("cTime").value,$("cTx").value)){
+    $("cName").value="";$("cTx").value="";$("cDoc").value="";$("cTime").value="";}}
+function renderConsultantPhone(){
+  const nowM=curMin();
+  let html=txListP()+`<datalist id="custListP">${Object.keys(state.customers||{}).sort().map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+  html+=`<div class="pcard"><div class="section-title" style="margin:0 0 6px">Add / walk-in</div>
+    <input id="cName" list="custListP" placeholder="Name\u2026" style="width:100%">
+    <div style="display:flex;gap:6px"><select id="cDoc" style="flex:1">${docOptions("")}</select><input id="cTime" class="timein" placeholder="time" style="width:96px"></div>
+    <div style="display:flex;gap:6px"><input id="cTx" list="txListP" placeholder="Treatment" style="flex:1;min-width:0"><button class="btn" onclick="arriveP()">+ Add</button></div></div>`;
+  const occR=allRooms().filter(r=>state.occ[r]);
+  html+=`<div class="section-title">Rooms in use (${occR.length})</div>`;
+  if(!occR.length)html+=`<div class="empty">All rooms free.</div>`;
+  occR.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
+    html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
+      <div class="pstatus ${st.cls}" data-oxys="${esc(r)}">${esc(st.t)}</div>
+      <div class="pmeta">${esc(o.doctor)||'no doctor'} \u00b7 ${o.therapist?esc(o.therapist):'<b style="color:#7b2cbf">\u26a0 no therapist</b>'}</div>
+      ${o.therapist?'':`<select onchange="roomSetTherapist('${jsq(r)}',this.value)">${thOptions('')}</select>`}
+      ${stageChipsRow(r,o)}
+      <div class="qactions"><button class="btn sm red" onclick="clearRoom('${jsq(r)}')">Clear room</button><button class="btn sm grey" onclick="roomToQueue('${jsq(r)}')">\u21a9 queue</button></div>
+    </div>`;});
+  const fr=freeRooms();
+  html+=`<div class="section-title" style="margin-top:14px">Free rooms (${fr.length})</div><div class="pcard">`+
+    (fr.length?fr.map(r=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><b style="width:120px;flex:none;font-size:13px">${esc(r)}</b><select style="flex:1;min-width:0" onchange="assignFreeRoom('${jsq(r)}',this.value)">${['<option value=\"\">assign from queue \u25be</option>'].concat(state.queue.map(q=>`<option value="${q.id}">${esc(q.customer)}${q.arrivedAt?' (waiting)':''}</option>`)).join('')}</select></div>`).join(''):'<div class="hint">none free</div>')+`</div>`;
+  const w=state.queue.filter(q=>q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
+  html+=`<div class="section-title" style="margin-top:14px">Waiting (${w.length})</div>`;
+  if(!w.length)html+=`<div class="empty">No one checked in.</div>`;
+  w.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="wmin">${wait}m</span></div>
+    <div class="pmeta">${esc(q.doctor)||'no doctor'}${q.appt?' \u00b7 appt '+esc(hm12(q.appt)):''}</div>
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')}</div>
+    <div class="qactions"><select onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select><select onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('\u2192 room \u25be')}</select></div>
+    <div class="qactions"><button class="btn sm grey" onclick="qCheckIn(${q.id})">\u21a9 appts</button><button class="btn sm grey" onclick="removeQueue(${q.id})">\u2715 remove</button></div></div>`;});
+  const ap=state.queue.filter(q=>!q.arrivedAt).sort((a,b)=>(toMin(a.appt)||9999)-(toMin(b.appt)||9999));
+  html+=`<div class="section-title" style="margin-top:14px">Appointments \u2014 not arrived (${ap.length})</div>`;
+  if(!ap.length)html+=`<div class="empty">None.</div>`;
+  ap.forEach(q=>{html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span></div>
+    <div class="pmeta">${esc(q.doctor)||'no doctor'}</div>
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')}</div>
+    <div class="qactions"><button class="chip go" onclick="qCheckIn(${q.id})">\u2713 Arrived</button><button class="btn sm grey" onclick="removeQueue(${q.id})">\u2715</button></div></div>`;});
   $("phoneHost").innerHTML=html;
 }
 
@@ -944,6 +1016,8 @@ applyRoleChrome();render();
 initCloud();
 setInterval(()=>{$("clock").textContent=nowHM();},1000);
 setInterval(tick,20000);
+setInterval(refreshTimers,1000);
+window.addEventListener("resize",()=>{applyRoleChrome();render();});
 autoBackup();setInterval(autoBackup,600000);
 </script>
 </body>
