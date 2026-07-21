@@ -124,11 +124,24 @@ async function main() {
           // to keep the daily sync running despite bad source data, not a
           // real fix. If this branch keeps firing, the CRM export itself
           // has a data-quality problem worth reporting to the vendor.
-          const rows = parse(text, {
+          const rawRows = parse(text, {
             columns: true,
             skip_empty_lines: true,
             quote: null,
             relax_column_count: true,
+          });
+          // quote:null leaves literal " characters on every field, including
+          // the header row (so column keys came out as `"StartDate"` instead
+          // of `StartDate`, silently breaking every field lookup downstream).
+          // Strip a leading/trailing " from every key and value to fix this.
+          const stripQuotes = (s) =>
+            typeof s === "string" ? s.replace(/^"|"$/g, "") : s;
+          const rows = rawRows.map((row) => {
+            const clean = {};
+            for (const [k, v] of Object.entries(row)) {
+              clean[stripQuotes(k)] = stripQuotes(v);
+            }
+            return clean;
           });
           console.error(`Fallback parse succeeded: ${rows.length} rows (some rows may have misaligned columns \u2014 see warning above)`);
           return rows;
