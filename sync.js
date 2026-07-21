@@ -103,10 +103,30 @@ async function main() {
           relax_column_count: true, // tolerate rows with an unexpected number of columns rather than throwing
         });
       } catch (parseErr) {
-        console.error("CSV parse failed. Diagnostic info:");
-        console.error("  Response length:", text.length, "characters");
-        console.error("  First 40 chars:", JSON.stringify(text.slice(0, 40)));
-        throw parseErr;
+        console.error("Tolerant CSV parse still failed:", parseErr.code || parseErr.message);
+        console.error("Retrying with quote handling disabled (last resort)...");
+        try {
+          // WARNING: this treats " as a plain character and splits only on
+          // commas. Any field that legitimately contains a comma (e.g. a
+          // Description with one) will get mis-split into extra columns for
+          // that row only — other rows are unaffected. This is a safety net
+          // to keep the daily sync running despite bad source data, not a
+          // real fix. If this branch keeps firing, the CRM export itself
+          // has a data-quality problem worth reporting to the vendor.
+          const rows = parse(text, {
+            columns: true,
+            skip_empty_lines: true,
+            quote: null,
+            relax_column_count: true,
+          });
+          console.error(`Fallback parse succeeded: ${rows.length} rows (some rows may have misaligned columns \u2014 see warning above)`);
+          return rows;
+        } catch (fallbackErr) {
+          console.error("Fallback parse also failed. Diagnostic info:");
+          console.error("  Response length:", text.length, "characters");
+          console.error("  First 40 chars:", JSON.stringify(text.slice(0, 40)));
+          throw fallbackErr;
+        }
       }
     }
     try {
