@@ -162,7 +162,6 @@
   .oxyctl .chip{padding:3px 8px}
   .oxyctl select{font-size:12px;padding:4px 6px}
   /* ===== v2: stage ===== */
-  .stagepill{display:inline-block;background:#e8eef9;color:#2c4a8a;border-radius:12px;padding:2px 9px;font-weight:700;font-size:12px}
   /* ===== v2: phone (doctor / therapist) views ===== */
   #phoneMain{max-width:560px}
   .pcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;margin-bottom:10px;display:flex;flex-direction:column;gap:7px}
@@ -172,6 +171,7 @@
   .pcard .proom{font-size:13px;font-weight:800;color:var(--accent);background:#e3eef0;border-radius:10px;padding:2px 9px;flex:none}
   .pstatus{font-size:13px;font-weight:700;color:#2c4a8a;background:#e8eef9;border-radius:8px;padding:4px 8px}
   .pstatus.mo{background:#ffd9d9;color:#b3261e}
+  .pstatus.soon{background:#fdeede;color:#8a5212}
   .pmeta{font-size:12px;color:var(--muted)}
   .notif{background:#1f4e5f;color:#fff;border-radius:10px;padding:10px 12px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;gap:8px;align-items:center;animation:nflash .8s 3}
   @keyframes nflash{0%,100%{background:#1f4e5f}50%{background:#2e7d8a}}
@@ -199,28 +199,31 @@
   .miniToggle{background:#eef3f4;border:1px solid var(--line);border-radius:10px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.5;vertical-align:middle;margin-left:4px}
   .miniToggle:hover{border-color:var(--accent)}
   .miniToggle.on{background:#e3eef0;border-color:var(--accent)}
-  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px 28px;overflow-y:auto;display:flex;flex-direction:column}
-  .focusHead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px 28px;overflow-y:auto;display:flex;flex-direction:column;height:100vh}
+  .focusHead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex:none}
+  .focusBody{flex:1;display:flex;flex-direction:column;min-height:0}
+  .focusBody.center{justify-content:center}
   .focusHead b{font-size:20px;display:block}
   .focusSub{font-size:14px;opacity:.75}
   .focusClose{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:22px;line-height:1;width:44px;height:44px;border-radius:50%;cursor:pointer;flex:none}
   .focusClose:hover{background:rgba(255,255,255,.24)}
-  .focusSteps{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
-  .focusStep{width:100%;text-align:left;padding:16px 18px;font-size:17px;font-weight:700;border-radius:12px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer}
+  .focusSteps{display:flex;flex-direction:column;gap:12px;margin-bottom:18px;flex:1;min-height:0}
+  .focusStep{width:100%;flex:1;text-align:left;padding:0 24px;font-size:22px;font-weight:700;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;display:flex;align-items:center}
   .focusStep.active{background:#fff;color:var(--head);border-color:#fff}
   .focusStep.done{opacity:.55;text-decoration:line-through}
-  .focusBig{font-size:30px;font-weight:800;text-align:center;margin:8px 0 20px;font-variant-numeric:tabular-nums}
+  .focusBig{font-size:38px;font-weight:800;text-align:center;margin:8px 0 24px;font-variant-numeric:tabular-nums;flex:none}
   .focusBig.over{color:#ffb3b0}
-  .focusRow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
-  .focusPicks{display:flex;flex-direction:column;gap:12px;margin-top:16px;max-width:420px;align-self:center;width:100%}
+  .focusRow{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;flex:none}
+  .focusPicks{display:flex;flex-direction:column;gap:14px;margin-top:16px;max-width:520px;align-self:center;width:100%;flex:1;min-height:0}
   .focusPill{padding:16px 22px;font-size:18px;font-weight:700;border-radius:14px;border:0;background:#fff;color:var(--head);cursor:pointer}
-  .focusPill.big{width:100%;padding:20px;font-size:22px;text-align:center}
+  .focusPicks .focusPill{flex:1;font-size:26px;display:flex;align-items:center;justify-content:center}
   .focusPill.go{background:#ffcf6b;color:#5a3d00}
   .focusInput{padding:16px;font-size:18px;border-radius:14px;border:0;width:110px;text-align:center}
-  .focusPicks .focusInput{width:100%;padding:20px;font-size:22px}
+  .focusPicks .focusInput{width:100%;flex:1;font-size:26px;min-height:0}
   .focusTrigger{padding:10px 16px;font-size:14px;font-weight:700;border-radius:10px;border:1px solid var(--line);background:#eef3f4;color:var(--head);cursor:pointer;margin:2px 0}
   .focusTrigger.go{background:var(--head);color:#fff;border-color:var(--head)}
   .focusTrigger.over{background:#fde3e2;color:#b3261e;border-color:#f2c4c4}
+  .focusTrigger.soon{background:#fdeede;color:#8a5212;border-color:#f0d48a}
   body.phoneui .mstep button{font-size:15px;padding:2px 5px}
   body.phoneui .stagechips .maskx{font-size:20px;padding:4px 10px;opacity:.85}
   body.phoneui .stagechips b{font-size:15px}
@@ -250,7 +253,6 @@
   body.phoneui .stagechips .slabel{font-size:14px}
   .chip.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
   .chip.sel:hover{background:var(--accent);filter:brightness(1.08)}
-  .stagepill{display:inline-block;background:#e8eef9;color:#2c4a8a;border-radius:12px;padding:1px 8px;font-weight:700;font-size:11px;white-space:nowrap}
   .hdrbreak{display:none}
   body.phoneui .hdrbreak{display:block;flex-basis:100%;height:0}
   body.phoneui .rolechip{margin-right:auto}
@@ -672,7 +674,7 @@ function oxyPos(o){const x=o&&o.oxy;if(!x)return null;
   return {i,remS:Math.max(0,Math.ceil(OXY_STEPS[i][1]*60-el)),fin:false};}
 function fmtRem(s){return Math.floor(s/60)+":"+pad(Math.floor(s%60));}
 function oxyLabel(p){const i=Math.min(p.i,OXY_STEPS.length-1);return "Oxy "+(i+1)+"/5 \u00b7 "+OXY_STEPS[i][0];}
-function oxyNum(p){return "Oxy "+(Math.min(p.i,OXY_STEPS.length-1)+1)+"/5";}
+function oxyNum(p){return p.fin?"Oxy done":("Oxy "+(Math.min(p.i,OXY_STEPS.length-1)+1)+"/5");}
 function oxyStepName(p){return OXY_STEPS[Math.min(p.i,OXY_STEPS.length-1)][0];}
 function oxyStart(room){const o=state.occ[room];if(!o)return;o.oxy={idx:0,ts:Date.now(),paused:false,pausedAt:0};
   o.stage="Treatment ongoing";o.numb="";o.mask="";o.consult=false; // exclusive
@@ -711,10 +713,10 @@ function theraModeRow(room,o){
   const hasOxy=txArr(o.treatment).concat(txArr(o.txDone)).some(t=>/^oxy\b|^oxyinfus/i.test(t));
   let main="",others=[];
   if(o.mask){const d=toMin(o.mask)-curMin();
-    main=`<button class="focusTrigger${d<0?' over':''}" data-trig="${esc(room)}" data-trigmode="mask" onclick="openFocus('${jsq(room)}','mask')">Mask \u00b7 ${d<0?'overdue '+(-d)+'m':'in '+d+'m'}</button>`;
+    main=`<button class="focusTrigger${d<0?' over':(d<=5?' soon':'')}" data-trig="${esc(room)}" data-trigmode="mask" onclick="openFocus('${jsq(room)}','mask')">Mask \u00b7 ${d<0?'overdue '+(-d)+'m':'in '+d+'m'}</button>`;
     others=[['Numb','numb'],['Oxy','oxy']];
   }else if(o.numb){const d=toMin(o.numb)-curMin();
-    main=`<button class="focusTrigger${d<0?' over':''}" data-trig="${esc(room)}" data-trigmode="numb" onclick="openFocus('${jsq(room)}','numb')">Numb \u00b7 ${d<0?'done '+(-d)+'m ago':d+'m left'}</button>`;
+    main=`<button class="focusTrigger${d<0?' over':(d<=2?' soon':'')}" data-trig="${esc(room)}" data-trigmode="numb" onclick="openFocus('${jsq(room)}','numb')">Numb \u00b7 ${d<0?'done '+(-d)+'m ago':d+'m left'}</button>`;
     others=[['Mask','mask'],['Oxy','oxy']];
   }else if(oxyPos(o)){
     main=`<button class="focusTrigger go" data-trig="${esc(room)}" data-trigmode="oxy" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 ${esc(oxyLabel(oxyPos(o)))}</button>`;
@@ -731,7 +733,7 @@ function renderFocusOverlay(){
   const {room,mode}=theraFocus;
   const o=state.occ[room];
   if(!o){theraFocus=null;return"";}
-  let body="";
+  let body="";let needsCenter=false;
   if(mode==='oxy'){
     if(!o.oxy){theraFocus=null;return"";}
     const p=oxyPos(o);const cur=p?p.i:0;
@@ -750,11 +752,15 @@ function renderFocusOverlay(){
         [10,15,20].map(m=>`<button class="focusPill big" onclick="numbIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
         `<input class="focusInput" placeholder="e.g. 345" onchange="numbSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
     }else{const d=toMin(o.numb)-curMin();
+      needsCenter=true;
       body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('Done '+(-d)+'m ago'):('till '+esc(hm12(o.numb))+' \u00b7 '+d+'m left')}</div>
       <div class="focusRow">
         <button class="focusPill" onclick="numbBump('${jsq(room)}',-1)">\u2212 1m</button>
         <button class="focusPill" onclick="numbBump('${jsq(room)}',1)">+ 1m</button>
         <button class="focusPill go" id="focusReadyBtn" style="${d<0?'':'display:none'}" onclick="focusNumbDone('${jsq(room)}')">\u2713 Ready</button>
+      </div>
+      <div class="focusRow" style="margin-top:16px">
+        <button class="focusPill" style="width:100%;padding:20px;font-size:20px" onclick="closeFocus()">\u2713 Done</button>
       </div>`;}
   }else if(mode==='mask'){
     if(!o.mask){
@@ -762,13 +768,17 @@ function renderFocusOverlay(){
         [5,10,15].map(m=>`<button class="focusPill big" onclick="maskIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
         `<input class="focusInput" placeholder="e.g. 345" onchange="maskSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
     }else{const d=toMin(o.mask)-curMin();
+      needsCenter=true;
       body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('overdue '+(-d)+'m'):('off '+esc(hm12(o.mask))+' \u00b7 in '+d+'m')}</div>
       <div class="focusRow">
         <button class="focusPill" onclick="maskBump('${jsq(room)}',-1)">\u2212 1m</button>
         <button class="focusPill" onclick="maskBump('${jsq(room)}',1)">+ 1m</button>
+      </div>
+      <div class="focusRow" style="margin-top:16px">
+        <button class="focusPill" style="width:100%;padding:20px;font-size:20px" onclick="closeFocus()">\u2713 Done</button>
       </div>`;}
   }
-  return `<div class="focusOverlay"><div class="focusHead"><div><b>${esc(o.customer)}</b><span class="focusSub">${esc(room)}</span></div><button class="focusClose" onclick="closeFocus()">\u2715</button></div>${body}</div>`;}
+  return `<div class="focusOverlay"><div class="focusHead"><div><b>${esc(o.customer)}</b><span class="focusSub">${esc(room)}</span></div><button class="focusClose" onclick="closeFocus()">\u2715</button></div><div class="focusBody${needsCenter?' center':''}">${body}</div></div>`;}
 function oxyDots(i){let s="";for(let k=0;k<OXY_STEPS.length;k++)s+=`<span class="${k<i?'on':(k===i?'on':'off')}">${k<i?'\u25cf':(k===i?'\u25c9':'\u25cb')}</span>`;return `<span class="oxydots">${s}</span>`;}
 let editingOxyRoom=null;
 let editingNoteRoom=null;
@@ -818,9 +828,7 @@ function oxyBlock(room,o,mode){ // mode: 'phone' (big controls) | 'board' (minim
   const p=oxyPos(o);const phone=mode==='phone';
   if(!p)return "";
   if(p.fin){
-    return `<div class="oxybox"><div class="oxyline">${oxyDots(5)} <span data-oxyl="${esc(room)}">Steps done \u2713</span></div>
-      <div class="oxyctl${phone?' big':''}"><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">\u25b6 Start mask ${OXY_MASK_MIN}m</button><button class="chip" onclick="oxyEnd('${jsq(room)}')">End without mask</button><select onchange="oxyJump('${jsq(room)}',this.value);this.value=''"><option value="">\u21a9 redo step\u2026</option>${OXY_STEPS.map((s,i)=>`<option value="${i}">${i+1}. ${esc(s[0])}</option>`).join('')}</select></div>
-    </div>`;}
+    return `<div class="oxybox mini"><div class="oxyline"><span>Oxy done</span><span style="flex:1"></span><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">\u25b6 Start mask</button><button class="maskx" title="dismiss" onclick="oxyEnd('${jsq(room)}')">\u2715</button></div></div>`;}
   const remHtml=o.oxy.paused?'<span class="oxyrem">\u23f8 paused</span>':`<span class="oxyrem${p.remS<=60?' over':(p.remS<=120?' soon':'')}" data-oxyt="${esc(room)}">~${fmtRem(p.remS)} left</span>`;
   const line=`<div class="oxyline">${oxyDots(p.i)} <span data-oxyl="${esc(room)}">${esc(oxyLabel(p))}</span> ${remHtml}</div>`;
   if(phone)return `<div class="oxybox${o.oxy.paused?' paused':''}">${line}${oxyCtlRow(room,o,true)}</div>`;
@@ -828,12 +836,16 @@ function oxyBlock(room,o,mode){ // mode: 'phone' (big controls) | 'board' (minim
   return `<div class="oxybox mini${o.oxy.paused?' paused':''}"><div style="display:flex;align-items:center;gap:5px;min-width:0"><div class="oxyline" style="min-width:0;flex-wrap:nowrap"><span style="flex:none">${oxyDots(p.i)}</span><span data-oxynm="${esc(room)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(oxyStepName(p))}</span><span style="flex:none">${remHtml}</span></div><span style="flex:1"></span><button class="docedit" title="adjust Oxy (normally the therapist does this from her phone)" onclick="oxyToggleEdit('${jsq(room)}')">${open?'\u25be':'\u270e'}</button></div>${open?oxyCtlRow(room,o,false):''}</div>`;}
 function statusFor(o){
   if(o.consult)return {t:"In consult"+(o.consultant?" \u00b7 "+o.consultant:""),cls:""};
-  if(o.mask){const d=toMin(o.mask)-curMin();return d<0?{t:"MASK OVERDUE "+(-d)+"m",cls:"mo"}:{t:"Mask on",cls:""};}
+  if(o.mask){const d=toMin(o.mask)-curMin();
+    if(d<0)return {t:"MASK OVERDUE "+(-d)+"m",cls:"mo"};
+    return {t:"Mask off "+hm12(o.mask)+" \u00b7 in "+d+"m",cls:d<=5?"soon":""};}
   const p=oxyPos(o);
   const paused=p&&o.oxy&&o.oxy.paused;
-  if(p&&!paused){if(p.fin)return {t:"Oxy steps done \u2014 mask next",cls:""};
+  if(p&&!paused){if(p.fin)return {t:"Oxy done \u2014 start mask?",cls:""};
     return {t:oxyLabel(p)+" \u00b7 ~"+fmtRem(p.remS)+" left",cls:""};}
-  if(o.numb){const d=toMin(o.numb)-curMin();return d<0?{t:"Numbing done \u2014 ready?",cls:"mo"}:{t:"Numbing",cls:""};}
+  if(o.numb){const d=toMin(o.numb)-curMin();
+    if(d<0)return {t:"Numbing done \u2014 ready?",cls:"mo"};
+    return {t:"Numb done "+hm12(o.numb)+" \u00b7 in "+d+"m",cls:d<=2?"soon":""};}
   if(paused)return {t:oxyLabel(p)+" \u00b7 \u23f8 paused",cls:""};
   return {t:o.stage||"In room",cls:""};}
 let editingNumbRoom=null;
@@ -855,13 +867,13 @@ function refreshTimers(){try{
       document.querySelectorAll(`[data-oxyl="${cssEsc(r)}"]`).forEach(el=>{el.textContent=oxyLabel(p);});
       document.querySelectorAll(`[data-oxyn="${cssEsc(r)}"]`).forEach(el=>{el.textContent=oxyNum(p);});
       document.querySelectorAll(`[data-oxynm="${cssEsc(r)}"]`).forEach(el=>{el.textContent=oxyStepName(p);});}
-    document.querySelectorAll(`[data-oxys="${cssEsc(r)}"]`).forEach(el=>{const st=statusFor(o);el.textContent=st.t;});
+    document.querySelectorAll(`[data-oxys="${cssEsc(r)}"]`).forEach(el=>{const st=statusFor(o);el.textContent=st.t;el.className="pstatus"+(st.cls?" "+st.cls:"");});
     document.querySelectorAll(`[data-teta="${cssEsc(r)}"]`).forEach(el=>{el.textContent=roomEta(o).txt;});
     if(o.consult)document.querySelectorAll(`[data-constart="${cssEsc(r)}"]`).forEach(el=>{el.textContent=consultElapsed(o)+"m";});
     document.querySelectorAll(`[data-trig="${cssEsc(r)}"]`).forEach(el=>{
       const mode=el.getAttribute('data-trigmode');
-      if(mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent="Mask \u00b7 "+(d<0?'overdue '+(-d)+'m':'in '+d+'m');el.classList.toggle('over',d<0);}
-      else if(mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent="Numb \u00b7 "+(d<0?'done '+(-d)+'m ago':d+'m left');el.classList.toggle('over',d<0);}
+      if(mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent="Mask \u00b7 "+(d<0?'overdue '+(-d)+'m':'in '+d+'m');el.classList.toggle('over',d<0);el.classList.toggle('soon',d>=0&&d<=5);}
+      else if(mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent="Numb \u00b7 "+(d<0?'done '+(-d)+'m ago':d+'m left');el.classList.toggle('over',d<0);el.classList.toggle('soon',d>=0&&d<=2);}
       else if(mode==='oxy'&&p)el.textContent="\u25b6 "+oxyLabel(p);
     });
   });
@@ -1148,19 +1160,22 @@ function renderTheraView(){
   if(!mine.length)html+=`<div class="empty">No rooms right now.</div>`;
   mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
     html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
-      <div class="pstatus ${st.cls}"><span data-oxys="${esc(r)}">${esc(st.t)}</span>${o.stage&&!st.t.startsWith(o.stage)?` <span class="stagepill">${esc(o.stage)}</span>`:''}</div>
+      <div class="pstatus ${st.cls}" data-oxys="${esc(r)}">${esc(st.t)}</div>
       ${theraModeRow(r,o)}
       ${consultBlock(r,o)}
       <div class="pmeta">Treatments \u2014 tap to mark done / undo:</div>
       ${phoneTxChips(r,o,true)}
       ${noteRow(r,o,'Note')}
+      ${o.nextRoom?`<div class="pmeta" style="margin-top:8px">Next \u2014 reserved for <b>${esc(o.nextRoom)}</b></div><div class="qactions"><button class="btn sm" style="flex:1" onclick="moveRoomToRoom('${jsq(r)}','${jsq(o.nextRoom)}')">\u2192 Move to ${esc(o.nextRoom)}</button></div>`:''}
+      <div class="qactions"><button class="btn sm red" onclick="clearRoom('${jsq(r)}')">Clear room \u2014 treatment done</button></div>
     </div>`;});
   const next=state.queue.filter(q=>sameName(q.therapist,me)).map(q=>({q,wait:q.arrivedAt?Math.max(0,nowM-toMin(q.arrivedAt)):-1})).sort((a,b)=>b.wait-a.wait);
   html+=`<div class="section-title" style="margin-top:14px">Assigned to me \u2014 up next (${next.length})</div>`;
   if(!next.length)html+=`<div class="empty">No one assigned yet. The consultant assigns from the board.</div>`;
   next.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span>${wait>=0?`<span class="wmin">${wait}m wait</span>`:`<span class="qtime">${q.appt?esc(hm12(q.appt)):'no time'}</span>`}</div>
     <div class="pmeta">${q.doctor?esc(q.doctor)+' \u00b7 ':''}${wait>=0?'in waiting room':'not arrived yet'}</div>
-    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div></div>`;});
+    <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')||'<span class="hint">no treatment set</span>'}</div>
+    ${wait>=0?`<div class="qactions"><select onchange="moveQueueToRoom(${q.id},this.value)" style="flex:1"><option value="">\u2192 bring to room\u2026</option>${freeRooms().map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>`:`<div class="pmeta hint">Check in from the board once they arrive</div>`}</div>`;});
   const done=state.completed.filter(c=>sameName(c.therapist,me));
   html+=`<div class="section-title" style="margin-top:14px">Done today (${done.length})</div>`;
   done.slice().reverse().forEach(c=>{html+=`<div class="rec-item">\u2713 ${esc(c.at||'')} \u00b7 ${esc(c.customer)}${txArr(c.treatment).length?' / '+esc(txDisp(c.treatment)):''}</div>`;});
