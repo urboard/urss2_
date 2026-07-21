@@ -199,6 +199,28 @@
   .miniToggle{background:#eef3f4;border:1px solid var(--line);border-radius:10px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.5;vertical-align:middle;margin-left:4px}
   .miniToggle:hover{border-color:var(--accent)}
   .miniToggle.on{background:#e3eef0;border-color:var(--accent)}
+  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px 28px;overflow-y:auto;display:flex;flex-direction:column}
+  .focusHead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+  .focusHead b{font-size:20px;display:block}
+  .focusSub{font-size:14px;opacity:.75}
+  .focusClose{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:22px;line-height:1;width:44px;height:44px;border-radius:50%;cursor:pointer;flex:none}
+  .focusClose:hover{background:rgba(255,255,255,.24)}
+  .focusSteps{display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+  .focusStep{width:100%;text-align:left;padding:16px 18px;font-size:17px;font-weight:700;border-radius:12px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer}
+  .focusStep.active{background:#fff;color:var(--head);border-color:#fff}
+  .focusStep.done{opacity:.55;text-decoration:line-through}
+  .focusBig{font-size:30px;font-weight:800;text-align:center;margin:8px 0 20px;font-variant-numeric:tabular-nums}
+  .focusBig.over{color:#ffb3b0}
+  .focusRow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .focusPicks{display:flex;flex-direction:column;gap:12px;margin-top:16px;max-width:420px;align-self:center;width:100%}
+  .focusPill{padding:16px 22px;font-size:18px;font-weight:700;border-radius:14px;border:0;background:#fff;color:var(--head);cursor:pointer}
+  .focusPill.big{width:100%;padding:20px;font-size:22px;text-align:center}
+  .focusPill.go{background:#ffcf6b;color:#5a3d00}
+  .focusInput{padding:16px;font-size:18px;border-radius:14px;border:0;width:110px;text-align:center}
+  .focusPicks .focusInput{width:100%;padding:20px;font-size:22px}
+  .focusTrigger{padding:10px 16px;font-size:14px;font-weight:700;border-radius:10px;border:1px solid var(--line);background:#eef3f4;color:var(--head);cursor:pointer;margin:2px 0}
+  .focusTrigger.go{background:var(--head);color:#fff;border-color:var(--head)}
+  .focusTrigger.over{background:#fde3e2;color:#b3261e;border-color:#f2c4c4}
   body.phoneui .mstep button{font-size:15px;padding:2px 5px}
   body.phoneui .stagechips .maskx{font-size:20px;padding:4px 10px;opacity:.85}
   body.phoneui .stagechips b{font-size:15px}
@@ -316,6 +338,7 @@
   <div id="notifHost"></div>
   <div id="phoneHost"></div>
 </main>
+<div id="focusHost"></div>
 
 <div class="modal-bg" id="tlogModal"><div class="modal">
   <h2>Customers by therapist <span onclick="closeModal('tlogModal')">✕</span></h2>
@@ -671,10 +694,81 @@ function oxyPause(room){const o=state.occ[room];if(!o||!o.oxy)return;const x=o.o
   else{x.paused=true;x.pausedAt=Date.now();}
   commitRoom(room);}
 function oxyEnd(room){const o=state.occ[room];if(!o)return;const p=oxyPos(o);
-  if(p&&p.fin)markOxyDone(o);
+  if(p&&p.i>=OXY_STEPS.length-1)markOxyDone(o); // reached the last step \u2014 treat as finished even without a mask
   o.oxy=null;editingOxyRoom=null;commitRoom(room);}
 function oxyFinishToMask(room){maskIn(room,OXY_MASK_MIN);}
 function oxyDoneToMask(room){maskIn(room,OXY_MASK_MIN);} // one tap: finish last step + start mask
+
+// ---- therapist full-screen focus mode: Oxy/Numb/Mask as one big, deep-teal, tap-anywhere view ----
+let theraFocus=null; // {room,mode:'oxy'|'numb'|'mask'}
+function openFocus(room,mode){
+  const o=state.occ[room];if(!o)return;
+  if(mode==='oxy'&&!o.oxy)oxyStart(room);
+  theraFocus={room,mode};render();}
+function closeFocus(){theraFocus=null;render();}
+function theraModeRow(room,o){
+  if(o.consult)return"";
+  const hasOxy=txArr(o.treatment).concat(txArr(o.txDone)).some(t=>/^oxy\b|^oxyinfus/i.test(t));
+  let main="",others=[];
+  if(o.mask){const d=toMin(o.mask)-curMin();
+    main=`<button class="focusTrigger${d<0?' over':''}" data-trig="${esc(room)}" data-trigmode="mask" onclick="openFocus('${jsq(room)}','mask')">Mask \u00b7 ${d<0?'overdue '+(-d)+'m':'in '+d+'m'}</button>`;
+    others=[['Numb','numb'],['Oxy','oxy']];
+  }else if(o.numb){const d=toMin(o.numb)-curMin();
+    main=`<button class="focusTrigger${d<0?' over':''}" data-trig="${esc(room)}" data-trigmode="numb" onclick="openFocus('${jsq(room)}','numb')">Numb \u00b7 ${d<0?'done '+(-d)+'m ago':d+'m left'}</button>`;
+    others=[['Mask','mask'],['Oxy','oxy']];
+  }else if(oxyPos(o)){
+    main=`<button class="focusTrigger go" data-trig="${esc(room)}" data-trigmode="oxy" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 ${esc(oxyLabel(oxyPos(o)))}</button>`;
+    others=[['Numb','numb'],['Mask','mask']];
+  }else{
+    main=`<button class="focusTrigger${hasOxy?' go':''}" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 Start Oxy</button>`;
+    others=[['Numb','numb'],['Mask','mask']];
+  }
+  return `<div class="stagechips">${main}${others.map(([label,mode])=>`<button class="chip" onclick="openFocus('${jsq(room)}','${mode}')">${label}</button>`).join('')}</div>`;}
+function focusStartMask(room){oxyDoneToMask(room);theraFocus={room,mode:'mask'};render();}
+function focusNumbDone(room){numbDone(room);closeFocus();}
+function renderFocusOverlay(){
+  if(!theraFocus)return"";
+  const {room,mode}=theraFocus;
+  const o=state.occ[room];
+  if(!o){theraFocus=null;return"";}
+  let body="";
+  if(mode==='oxy'){
+    if(!o.oxy){theraFocus=null;return"";}
+    const p=oxyPos(o);const cur=p?p.i:0;
+    body=`<div class="focusSteps">`+OXY_STEPS.map((s,i)=>{
+      const done=p&&i<p.i;const active=p&&i===cur&&!p.fin;
+      return `<button class="focusStep${done?' done':''}${active?' active':''}" onclick="oxyJump('${jsq(room)}',${i})">${done?'\u2713 ':''}${i+1}. ${esc(s[0])}</button>`;}).join('')+
+      `</div>
+      <div class="focusBig" id="focusBigTxt">${p&&!p.fin?('~'+fmtRem(p.remS)+' left'):'Steps done'}</div>
+      <div class="focusRow">
+        <button class="focusPill" onclick="oxyPause('${jsq(room)}')">${o.oxy.paused?'\u25b6 Resume':'\u23f8 Pause'}</button>
+        <button class="focusPill go" onclick="focusStartMask('${jsq(room)}')">\u25b6 Start mask now</button>
+      </div>`;
+  }else if(mode==='numb'){
+    if(!o.numb){
+      body=`<div class="focusBig">Numb for</div><div class="focusPicks">`+
+        [10,15,20].map(m=>`<button class="focusPill big" onclick="numbIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
+        `<input class="focusInput" placeholder="e.g. 345" onchange="numbSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
+    }else{const d=toMin(o.numb)-curMin();
+      body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('Done '+(-d)+'m ago'):('till '+esc(hm12(o.numb))+' \u00b7 '+d+'m left')}</div>
+      <div class="focusRow">
+        <button class="focusPill" onclick="numbBump('${jsq(room)}',-1)">\u2212 1m</button>
+        <button class="focusPill" onclick="numbBump('${jsq(room)}',1)">+ 1m</button>
+        <button class="focusPill go" id="focusReadyBtn" style="${d<0?'':'display:none'}" onclick="focusNumbDone('${jsq(room)}')">\u2713 Ready</button>
+      </div>`;}
+  }else if(mode==='mask'){
+    if(!o.mask){
+      body=`<div class="focusBig">Mask for</div><div class="focusPicks">`+
+        [5,10,15].map(m=>`<button class="focusPill big" onclick="maskIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
+        `<input class="focusInput" placeholder="e.g. 345" onchange="maskSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
+    }else{const d=toMin(o.mask)-curMin();
+      body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('overdue '+(-d)+'m'):('off '+esc(hm12(o.mask))+' \u00b7 in '+d+'m')}</div>
+      <div class="focusRow">
+        <button class="focusPill" onclick="maskBump('${jsq(room)}',-1)">\u2212 1m</button>
+        <button class="focusPill" onclick="maskBump('${jsq(room)}',1)">+ 1m</button>
+      </div>`;}
+  }
+  return `<div class="focusOverlay"><div class="focusHead"><div><b>${esc(o.customer)}</b><span class="focusSub">${esc(room)}</span></div><button class="focusClose" onclick="closeFocus()">\u2715</button></div>${body}</div>`;}
 function oxyDots(i){let s="";for(let k=0;k<OXY_STEPS.length;k++)s+=`<span class="${k<i?'on':(k===i?'on':'off')}">${k<i?'\u25cf':(k===i?'\u25c9':'\u25cb')}</span>`;return `<span class="oxydots">${s}</span>`;}
 let editingOxyRoom=null;
 let editingNoteRoom=null;
@@ -764,7 +858,23 @@ function refreshTimers(){try{
     document.querySelectorAll(`[data-oxys="${cssEsc(r)}"]`).forEach(el=>{const st=statusFor(o);el.textContent=st.t;});
     document.querySelectorAll(`[data-teta="${cssEsc(r)}"]`).forEach(el=>{el.textContent=roomEta(o).txt;});
     if(o.consult)document.querySelectorAll(`[data-constart="${cssEsc(r)}"]`).forEach(el=>{el.textContent=consultElapsed(o)+"m";});
-  });}catch(e){}}
+    document.querySelectorAll(`[data-trig="${cssEsc(r)}"]`).forEach(el=>{
+      const mode=el.getAttribute('data-trigmode');
+      if(mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent="Mask \u00b7 "+(d<0?'overdue '+(-d)+'m':'in '+d+'m');el.classList.toggle('over',d<0);}
+      else if(mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent="Numb \u00b7 "+(d<0?'done '+(-d)+'m ago':d+'m left');el.classList.toggle('over',d<0);}
+      else if(mode==='oxy'&&p)el.textContent="\u25b6 "+oxyLabel(p);
+    });
+  });
+  if(typeof theraFocus!=='undefined'&&theraFocus){
+    const o=state.occ[theraFocus.room];const el=$("focusBigTxt");
+    if(o&&el){
+      if(theraFocus.mode==='oxy'){const p=oxyPos(o);el.textContent=(p&&!p.fin)?("~"+fmtRem(p.remS)+" left"):"Steps done";}
+      else if(theraFocus.mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent=d<0?("Done "+(-d)+"m ago"):("till "+hm12(o.numb)+" \u00b7 "+d+"m left");el.classList.toggle('over',d<0);
+        const rb=$("focusReadyBtn");if(rb)rb.style.display=d<0?'':'none';}
+      else if(theraFocus.mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent=d<0?("overdue "+(-d)+"m"):("off "+hm12(o.mask)+" \u00b7 in "+d+"m");el.classList.toggle('over',d<0);}
+    }
+  }
+  }catch(e){}}
 function sameName(a,b){return String(a||"").trim().toLowerCase()===String(b||"").trim().toLowerCase();}
 
 /* ===== undo (board roles) ===== */
@@ -794,6 +904,7 @@ function render(){
   if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)&&ae.id)return; // don't wipe a field the person is actively typing in
   syncMainVis();
   if(usePhoneUI())renderPhone();else renderBoard();
+  $("focusHost").innerHTML=(ROLE==='therapist'&&usePhoneUI())?renderFocusOverlay():"";
 }
 function applyRoleChrome(){
   const ph=usePhoneUI();const board=isBoardRole();
@@ -863,10 +974,9 @@ function attentionList(){
     if(o.numb){const d=toMin(o.numb)-curMin();
       if(d<0)out.push({r,txt:"numbing done \u2014 ready?",cls:"",pri:0,act:"numbdone",label:"\u2713 Ready"});
       else if(d<=2)out.push({r,txt:"numbing done in "+d+"m",cls:"mid",pri:1});}
-    const p=oxyPos(o);if(p&&p.fin&&!o.mask)out.push({r,txt:"Oxy steps done \u2014 mask not started",cls:"mid",pri:1,act:"mask",label:"Start mask"});
   });
   out.sort((a,b)=>a.pri-b.pri);return out;}
-function attnAction(act,room){if(act==="clear")clearRoom(room);else if(act==="numbdone")numbDone(room);else if(act==="mask")oxyDoneToMask(room);}
+function attnAction(act,room){if(act==="clear")clearRoom(room);else if(act==="numbdone")numbDone(room);}
 function roomEta(o){ // minutes until this room needs no more therapist time, or null if unknown
   if(o.consult)return {m:null,pend:0,txt:"in consult"+(o.consultant?" \u00b7 "+o.consultant:""),over:false};
   if(o.mask){const d=toMin(o.mask)-curMin();return {m:Math.max(0,d),txt:d<0?"mask overdue "+(-d)+"m":"mask off "+hm12(o.mask),over:d<0};}
@@ -1039,9 +1149,8 @@ function renderTheraView(){
   mine.forEach(r=>{const o=state.occ[r];const st=statusFor(o);
     html+=`<div class="pcard"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
       <div class="pstatus ${st.cls}"><span data-oxys="${esc(r)}">${esc(st.t)}</span>${o.stage&&!st.t.startsWith(o.stage)?` <span class="stagepill">${esc(o.stage)}</span>`:''}</div>
-      ${stageChipsRow(r,o)}
+      ${theraModeRow(r,o)}
       ${consultBlock(r,o)}
-      ${oxyBlock(r,o,'phone')}
       <div class="pmeta">Treatments \u2014 tap to mark done / undo:</div>
       ${phoneTxChips(r,o,true)}
       ${noteRow(r,o,'Note')}
