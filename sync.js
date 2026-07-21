@@ -88,6 +88,17 @@ async function main() {
   if (!res.ok) throw new Error(`CRM fetch failed: ${res.status} ${res.statusText}`);
   const all = await (async () => {
     const text = await res.text();
+    const expectedLen = res.headers.get("content-length");
+    if (expectedLen && Number(expectedLen) !== Buffer.byteLength(text)) {
+      console.error(`WARNING: response may be truncated \u2014 server said Content-Length: ${expectedLen} bytes, but we received ${Buffer.byteLength(text)} bytes.`);
+    } else if (expectedLen) {
+      console.error(`Response length matches Content-Length header (${expectedLen} bytes) \u2014 not truncated.`);
+    } else {
+      console.error("No Content-Length header provided by server \u2014 cannot confirm the response wasn't truncated. Received", Buffer.byteLength(text), "bytes.");
+    }
+    const quoteCount = (text.match(/"/g) || []).length;
+    console.error(`Total " characters in response: ${quoteCount} (${quoteCount % 2 === 0 ? "even \u2014 quotes balance" : "ODD \u2014 an unclosed quote exists somewhere, consistent with truncation or a genuine data error"})`);
+    console.error("Last 60 chars of response:", JSON.stringify(text.slice(-60)));
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("csv") || text.trimStart().startsWith('"')) {
       // Server sends CSV (quoted, comma-separated), not JSON as originally
@@ -148,6 +159,22 @@ async function main() {
     (a) => a.Status !== "DELETED" && a.StartDate === targetDate
   );
   console.log(`${all.length} total rows -> ${kept.length} after filtering`);
+
+  if (kept.length === 0) {
+    // Zero matches is suspicious given a real appointment for this exact
+    // date was confirmed to exist in the CRM. Two different explanations
+    // are possible and need to be told apart:
+    //  1. The fallback (comma-split) parser misaligned columns, so
+    //     StartDate values are garbage / shifted from their real column.
+    //  2. This report is genuinely historical and doesn't contain
+    //     tomorrow's date at all, no matter how the file is parsed.
+    const allDates = all.map((a) => a.StartDate).filter(Boolean);
+    const uniqueDates = [...new Set(allDates)];
+    console.log(`DIAGNOSTIC: ${uniqueDates.length} distinct StartDate values found in the whole file.`);
+    console.log("DIAGNOSTIC: sample of 10 distinct StartDate values:", uniqueDates.slice(0, 10));
+    const looksLike2026 = uniqueDates.filter((d) => /2026/.test(d));
+    console.log(`DIAGNOSTIC: of those, ${looksLike2026.length} contain "2026" anywhere. Examples:`, looksLike2026.slice(0, 10));
+  }
 
   // Group by branch
   const byBranch = {};
