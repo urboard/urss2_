@@ -180,7 +180,7 @@
   .rolebtns button{padding:13px;font-size:15px;font-weight:800;border:1px solid var(--line);border-radius:9px;background:#fbfdfd;cursor:pointer;text-align:left}
   .rolebtns button:hover{background:#e9f0f1;border-color:var(--accent)}
   /* ===== v2.1 phone polish ===== */
-  @media(max-width:640px){input,select,.timein,.txin{font-size:16px}}
+  @media(max-width:640px){input,select,textarea,.timein,.txin,.note-in{font-size:16px}}
   body.phoneui header{padding:6px 10px;gap:7px}
   body.phoneui header h1{font-size:15px}
   body.phoneui .logo{display:none}
@@ -505,6 +505,13 @@ function applyRecs(which,v){state[which]=Object.values(v||{}).filter(Boolean).ma
 /* ===== doctor notifications (in-app; fires while the app is open) ===== */
 function scanAlerts(){
   if(ROLE!=='doctor'||!MYNAME)return;
+  // drop any notif whose underlying situation is no longer true (e.g. customer moved back to queue)
+  activeNotifs=activeNotifs.filter(n=>{
+    let keep=true;
+    if(n.k[0]==='q'){const id=parseInt(n.k.slice(1),10);const q=state.queue.find(x=>x.id===id);keep=!!(q&&sameName(q.doctor,MYNAME)&&q.arrivedAt);}
+    else if(n.k[0]==='r'){const rest=n.k.slice(1);const sep=rest.indexOf('|');const room=rest.slice(0,sep);const cust=rest.slice(sep+1);const o=state.occ[room];keep=!!(o&&sameName(o.doctor,MYNAME)&&o.customer===cust);}
+    if(!keep)delete seenAlerts[n.k];
+    return keep;});
   const found=[];
   state.queue.forEach(q=>{if(sameName(q.doctor,MYNAME)&&q.arrivedAt)found.push({k:"q"+q.id,msg:q.customer+" has arrived · waiting"});});
   allRooms().forEach(r=>{const o=state.occ[r];if(o&&sameName(o.doctor,MYNAME))found.push({k:"r"+r+"|"+o.customer,msg:o.customer+" — in "+r});});
@@ -905,8 +912,8 @@ function renderWaiting(){
   let html=`<div class="section-title">Waiting room — longest first (${w.length})</div>`;
   if(!w.length){html+=`<div class="hint">No one checked in. Tap “✓ Arrived” on an appointment.</div>`;}
   w.forEach(({q,wait})=>{const cls=wait>=40?'wlong':wait>=20?'wmed':'';
-    html+=`<div class="witem ${cls}"><div class="wtop"><b>${esc(q.customer)}</b>${qConsultBadge(q)}<span class="wmin">${wait}m</span></div>
-      <div class="qmeta" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">${docInline(q.id,q.doctor)}${q.appt?' · '+esc(hm12(q.appt)):''}<span style="flex:1"></span><select style="width:96px;flex:none" onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select></div>
+    html+=`<div class="witem ${cls}"><div class="wtop"><b>${esc(q.customer)}</b><span class="wmin">${wait}m</span></div>
+      <div class="qmeta" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">${docInline(q.id,q.doctor)}${q.appt?' · '+esc(hm12(q.appt)):''}<span style="flex:1"></span>${qConsultBadge(q)}<select style="width:96px;flex:none" onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select></div>
       ${qConsultDetail(q)}
       <div class="txwrap">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ tx" onchange="qTxAdd(${q.id},this.value);this.value=''"></div>
       <div style="display:flex;gap:6px;align-items:center"><select onchange="moveQueueToRoom(${q.id},this.value)" style="flex:1">${sendRoomOpts('→ room ▾')}</select><button class="btn sm grey" title="Clicked Arrived by mistake — send back to appointments" onclick="qCheckIn(${q.id})">↩ appts</button><button class="btn sm grey" title="Remove customer (logged in Records)" onclick="removeQueue(${q.id})">✕</button></div></div>`;});
@@ -1062,22 +1069,25 @@ function renderConsultantPhone(){
   const w=state.queue.filter(q=>q.arrivedAt).map(q=>({q,wait:Math.max(0,nowM-toMin(q.arrivedAt))})).sort((a,b)=>b.wait-a.wait);
   html+=`<div class="section-title" style="margin-top:${attn.length?'14px':'0'}">Waiting (${w.length})</div>`;
   if(!w.length)html+=`<div class="empty">No one checked in.</div>`;
-  w.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span>${qConsultBadge(q)}<span class="wmin">${wait}m</span></div>
+  w.forEach(({q,wait})=>{html+=`<div class="pcard${wait>=20?' alert':''}"><div class="ptop"><span class="pname">${esc(q.customer)}</span><span class="wmin">${wait}m</span></div>
     <div class="pmeta">${esc(q.doctor)||'no doctor'}${q.appt?' \u00b7 appt '+esc(hm12(q.appt)):''}</div>
     ${qConsultDetail(q)}
     <div class="txwrap">${txArr(q.treatment).map(x=>`<span class="txchip">${esc(x)}</span>`).join('')}</div>
-    <div class="qactions"><select onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select><select onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('\u2192 room \u25be')}</select></div>
+    <div class="qactions">${qConsultBadge(q)}<select onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select><select onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('\u2192 room \u25be')}</select></div>
     <div class="qactions"><button class="btn sm grey" onclick="qCheckIn(${q.id})">\u21a9 appts</button><button class="btn sm grey" onclick="removeQueue(${q.id})">\u2715 remove</button></div></div>`;});
   // rooms in use, most urgent first (mask overdue -> mask soon -> numb done -> oxy finished -> rest)
   const occR=allRooms().filter(r=>state.occ[r]).sort((a,b)=>roomUrgency(state.occ[a])-roomUrgency(state.occ[b]));
   html+=`<div class="section-title" style="margin-top:14px">Rooms in use (${occR.length})</div>`;
   if(!occR.length)html+=`<div class="empty">All rooms free.</div>`;
-  occR.forEach(r=>{const o=state.occ[r];const st=statusFor(o);const urgent=roomUrgency(o)<4;
+  occR.forEach(r=>{const o=state.occ[r];const urgent=roomUrgency(o)<4;
     html+=`<div class="pcard${urgent?' alert':''}"><div class="ptop"><span class="pname">${esc(o.customer)}</span><span class="proom">${esc(r)}</span></div>
-      <div class="pstatus ${st.cls}" data-oxys="${esc(r)}">${esc(st.t)}</div>
       <div class="pmeta">${esc(o.doctor)||'no doctor'} \u00b7 ${o.therapist?esc(o.therapist):'<b style="color:#7b2cbf">\u26a0 no therapist</b>'}</div>
       ${o.therapist?'':`<select onchange="roomSetTherapist('${jsq(r)}',this.value)">${thOptions('')}</select>`}
+      ${o.consult?'':stageChipsRow(r,o)}
+      ${consultBlock(r,o)}
+      ${oxyBlock(r,o,'phone')}
       ${phoneTxChips(r,o,false)}
+      ${noteRow(r,o,'Note')}
       <div class="qactions"><button class="btn sm red" onclick="clearRoom('${jsq(r)}')">Clear room</button><button class="btn sm grey" onclick="roomToQueue('${jsq(r)}')">\u21a9 queue</button></div>
     </div>`;});
   // free rooms
