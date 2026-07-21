@@ -191,7 +191,7 @@
   .miniToggle{background:#eef3f4;border:1px solid var(--line);border-radius:10px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.5;vertical-align:middle;margin-left:4px}
   .miniToggle:hover{border-color:var(--accent)}
   .miniToggle.on{background:#e3eef0;border-color:var(--accent)}
-  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px;padding-bottom:calc(58px + env(safe-area-inset-bottom,0px));overflow-y:auto;display:flex;flex-direction:column;height:100vh;height:100dvh}
+  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));overflow-y:auto;display:flex;flex-direction:column;height:100vh;height:100dvh}
   .focusHead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex:none}
   .focusBody{flex:1;display:flex;flex-direction:column;min-height:0}
   .focusBody.center{justify-content:center}
@@ -644,12 +644,13 @@ function maskIn(room,mins){if(!state.occ[room])return;let m=(curMin()+mins)%1440
 function maskClear(room){const o=state.occ[room];if(o){o.mask="";if(o.stage==="Mask on")o.stage="";commitRoom(room);}}
 function moveRoomToRoom(from,to){if(!to)return;if(state.occ[to]){toast(to+" is occupied");render();return;}const rv=nextFor(to);if(rv&&rv.from!==from){toast(to+" is reserved for "+rv.customer);render();return;}
   const cust=state.occ[from]?state.occ[from].customer:"";
+  const prevNext=state.occ[from]?state.occ[from].nextRoom:""; // remember the reservation so undo can restore it
   state.occ[to]=state.occ[from];state.occ[to].nextRoom="";state.occ[from]=null;
   cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));
   toast(cust+" moved to "+to,()=>{
     if(state.occ[from]){toast(from+" is occupied \u2014 can't undo");return;}
     if(!state.occ[to]||state.occ[to].customer!==cust){toast("Too late to undo");return;}
-    state.occ[from]=state.occ[to];state.occ[to]=null;
+    state.occ[from]=state.occ[to];state.occ[from].nextRoom=prevNext;state.occ[to]=null;
     cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));
     toast("Moved back to "+from);});}
 function roomToQueue(room){const o=state.occ[room];if(!o)return;const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
