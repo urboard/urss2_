@@ -4,7 +4,12 @@ on:
   schedule:
     # 10:00 PM Malaysia time (UTC+8) = 14:00 UTC
     - cron: '0 14 * * *'
-  workflow_dispatch: {} # lets you also trigger it manually from the Actions tab, for testing
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Force a specific date instead of "tomorrow" (format: DD/Mon/YYYY, e.g. 22/Jul/2026). Leave blank for normal behavior.'
+        required: false
+        default: ''
 
 jobs:
   sync:
@@ -24,6 +29,7 @@ jobs:
           CRM_TOKEN: ${{ secrets.CRM_TOKEN }}
           CRM_USERNAME: ${{ secrets.CRM_USERNAME }}
           CRM_PASSWORD: ${{ secrets.CRM_PASSWORD }}
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
           FIREBASE_SA_GL: ${{ secrets.FIREBASE_SA_GL }}
           FIREBASE_SA_SS2: ${{ secrets.FIREBASE_SA_SS2 }}
           FIREBASE_SA_RU: ${{ secrets.FIREBASE_SA_RU }}
