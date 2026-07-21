@@ -191,7 +191,7 @@
   .miniToggle{background:#eef3f4;border:1px solid var(--line);border-radius:10px;padding:1px 7px;font-size:12px;cursor:pointer;line-height:1.5;vertical-align:middle;margin-left:4px}
   .miniToggle:hover{border-color:var(--accent)}
   .miniToggle.on{background:#e3eef0;border-color:var(--accent)}
-  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px 28px;overflow-y:auto;display:flex;flex-direction:column;height:100vh}
+  .focusOverlay{position:fixed;inset:0;background:var(--head);color:#fff;z-index:9999;padding:18px 16px;padding-bottom:calc(58px + env(safe-area-inset-bottom,0px));overflow-y:auto;display:flex;flex-direction:column;height:100vh;height:100dvh}
   .focusHead{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex:none}
   .focusBody{flex:1;display:flex;flex-direction:column;min-height:0}
   .focusBody.center{justify-content:center}
@@ -203,7 +203,7 @@
   .focusStep{width:100%;flex:1;text-align:left;padding:0 24px;font-size:22px;font-weight:700;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;display:flex;align-items:center}
   .focusStep.active{background:#fff;color:var(--head);border-color:#fff}
   .focusStep.done{opacity:.55;text-decoration:line-through}
-  .focusBig{font-size:38px;font-weight:800;text-align:center;margin:8px 0 24px;font-variant-numeric:tabular-nums;flex:none}
+  .focusBig{font-size:38px;font-weight:800;text-align:center;margin:4px 0 16px;font-variant-numeric:tabular-nums;flex:none}
   .focusBig.over{color:#ffb3b0}
   .focusRow{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;flex:none}
   .focusPicks{display:flex;flex-direction:column;gap:14px;margin-top:16px;max-width:520px;align-self:center;width:100%;flex:1;min-height:0}
