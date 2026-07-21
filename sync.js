@@ -88,18 +88,30 @@ async function main() {
   if (!res.ok) throw new Error(`CRM fetch failed: ${res.status} ${res.statusText}`);
   const all = await (async () => {
     const text = await res.text();
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("csv") || text.trimStart().startsWith('"')) {
+      // Server sends CSV (quoted, comma-separated), not JSON as originally
+      // described. `columns: true` turns each row into an object keyed by
+      // the header row, so every field name downstream stays the same as
+      // if it had come from JSON.
+      const { parse } = require("csv-parse/sync");
+      try {
+        return parse(text, { columns: true, skip_empty_lines: true });
+      } catch (parseErr) {
+        console.error("CSV parse failed. Diagnostic info:");
+        console.error("  Response length:", text.length, "characters");
+        console.error("  First 40 chars:", JSON.stringify(text.slice(0, 40)));
+        throw parseErr;
+      }
+    }
     try {
       return JSON.parse(text);
     } catch (parseErr) {
-      // Don't print the full response — it may contain patient data.
-      // Print only enough structure to diagnose the shape of the problem.
-      console.error("Response was not valid JSON. Diagnostic info:");
+      console.error("Response was neither CSV nor valid JSON. Diagnostic info:");
       console.error("  HTTP status:", res.status);
-      console.error("  Content-Type:", res.headers.get("content-type"));
+      console.error("  Content-Type:", contentType);
       console.error("  Response length:", text.length, "characters");
-      console.error("  First 20 chars:", JSON.stringify(text.slice(0, 20)));
-      console.error("  Last 20 chars:", JSON.stringify(text.slice(-20)));
-      console.error("  Char at position 14:", JSON.stringify(text.slice(10, 20)));
+      console.error("  First 40 chars:", JSON.stringify(text.slice(0, 40)));
       throw parseErr;
     }
   })();
