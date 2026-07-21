@@ -77,7 +77,14 @@ async function main() {
   if (!token) throw new Error("CRM_TOKEN environment variable is not set");
 
   console.log("Fetching CRM appointment feed...");
-  const res = await fetch(token);
+  const username = process.env.CRM_USERNAME;
+  const password = process.env.CRM_PASSWORD;
+  if (!username || !password) throw new Error("CRM_USERNAME / CRM_PASSWORD environment variables are not set");
+  const basicAuth = Buffer.from(`${username}:${password}`).toString("base64");
+
+  const res = await fetch(token, {
+    headers: { Authorization: `Basic ${basicAuth}` },
+  });
   if (!res.ok) throw new Error(`CRM fetch failed: ${res.status} ${res.statusText}`);
   const all = await res.json();
 
