@@ -664,10 +664,17 @@ function clearRoom(room){const o=state.occ[room];if(o&&!o.therapist){toast("Assi
   cloudPatch(patch);}
 function assignFreeRoom(room,id){if(id)moveQueueToRoom(parseInt(id,10),room);}
 function toggleFilter(v){filterWindow=v;try{localStorage.setItem(LS_FILTER,v?"1":"0");}catch(e){}render();}
-function resetBoard(){if(!isCounter())return;if(!confirm("Reset the board to empty? This clears all rooms, queue, waiting, and today's records. Your doctor/therapist/treatment/room lists are kept."))return;
-  autoBackup();const occ={};allRooms().forEach(r=>occ[r]=null);state.occ=occ;state.queue=[];state.completed=[];state.removed=[];
-  if(baseRef){try{baseRef.update({occ:null,queue:null,completed:null,removed:null});}catch(e){}}
-  saveLocal();recordHistory();render();toast("Board reset");}
+function resetBoard(){if(!isCounter())return;if(!confirm("Reset the board to empty? This clears all rooms, queue, waiting, and today's records. Appointments synced from the CRM are kept. Your doctor/therapist/treatment/room lists are kept."))return;
+  autoBackup();const occ={};allRooms().forEach(r=>occ[r]=null);state.occ=occ;
+  const toRemove=(state.queue||[]).filter(q=>q&&q.source!=="crm"); // only clear manually-added walk-ins
+  const keptQueue=(state.queue||[]).filter(q=>q&&q.source==="crm"); // spare CRM-synced appointments
+  state.queue=keptQueue;state.completed=[];state.removed=[];
+  if(baseRef){try{
+    const patch={occ:null,completed:null,removed:null};
+    toRemove.forEach(q=>{patch["queue/"+q.id]=null;}); // delete only the walk-ins; synced entries are never referenced, so they're left alone
+    baseRef.update(patch);
+  }catch(e){}}
+  saveLocal();recordHistory();render();toast("Board reset"+(keptQueue.length?` (kept ${keptQueue.length} synced appointment${keptQueue.length===1?'':'s'})`:""));}
 
 /* ===== Oxy step engine =====
    o.oxy = {idx, ts, paused, pausedAt}. Position is COMPUTED from
