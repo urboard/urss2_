@@ -90,14 +90,6 @@
   .docedit:hover{background:#eef3f4;color:var(--accent)}
   .mask b{font-variant-numeric:tabular-nums}
   .rel{font-size:12px;color:var(--muted);margin-left:4px}.rel.over{color:#c0392b;font-weight:700}.rel.soon{color:#b8860b;font-weight:700}
-  .maskbtns{display:flex;gap:5px;flex-wrap:nowrap;align-items:center}
-  .maskbtns .hint{white-space:nowrap;flex:none;font-size:13px;color:var(--muted)}.maskbtns .chip{padding:3px 7px}
-  .maskrow{flex-wrap:wrap;align-items:center;row-gap:3px}
-  .maskrow label{padding-top:0}
-  .maskrow .hint{white-space:nowrap;flex:none;font-size:13px;color:var(--muted)}
-  .maskrow .chip{padding:3px 7px}
-  .maskrow .timein{width:84px}
-  .maskbtns .timein{width:84px}
   .chip{background:#eef3f4;border:1px solid var(--line);border-radius:14px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink)}
   .chip:hover{background:#d8e6e8}.chip.x{color:#c0392b}
   .chip.go{background:#2e7d8a;color:#fff;border-color:#2e7d8a}
@@ -126,7 +118,6 @@
   .witem.wlong .wmin{color:#c0392b}.witem.wmed .wmin{color:#b8860b}
   .queue{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
   .qitem{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;background:#fbfdfd}
-  .qtop{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
   .qtime{font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;flex:none}
   .qname{font-weight:700;font-size:15px;flex:1}
   .qactions{display:flex;gap:6px;align-items:center;margin-top:6px}
@@ -148,6 +139,9 @@
   .settings .grp{margin-bottom:12px}.settings .grp label{font-weight:700;font-size:13px}
   .hint{font-size:12px;color:var(--muted)}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2d33;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;opacity:0;transition:opacity .2s;z-index:99;pointer-events:none}
+  .toast.action{pointer-events:auto}
+  .toastUndo{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;font-weight:800;padding:3px 10px;border-radius:6px;cursor:pointer;margin-left:6px}
+  .toastUndo:hover{background:rgba(255,255,255,.3)}
   .toast.show{opacity:1}
   /* ===== v2: Oxy step engine ===== */
   .oxybox{background:#eef7f8;border:1px solid #bfe0e4;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:5px}
@@ -191,8 +185,6 @@
   .oxyctl.big .chip{padding:12px 16px;font-size:16px;border-radius:12px}
   .oxyctl.big select{font-size:16px;padding:10px;border-radius:10px}
   .oxyctl.big .maskx{font-size:16px;padding:6px 10px}
-  .chip.bigstart{padding:12px 18px;font-size:16px;border-radius:12px}
-  body.phoneui .maskrow .chip,.pcard .maskrow .chip{padding:9px 14px;font-size:15px}
   .stagechips{display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-width:0}
   .stagechips.oneline{flex-wrap:nowrap}
   .stagechips .maskx{flex:none;margin-left:auto}
@@ -261,7 +253,6 @@
   .oxybox.mini .oxydots{font-size:10px;letter-spacing:1px}
   .pcard .txchip{padding:8px 12px;font-size:15px;border-radius:14px}
   .txaddsel{font-size:15px;padding:8px;min-width:110px}
-  .chip.bigstart{width:100%;text-align:center;background:var(--accent);color:#fff;border-color:var(--accent)}
   .trow{border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;background:#fbfdfd}
   .trow.free{background:#e6f4ea;border-color:#9cc4a8}
   .trow.soon{background:#fff8e1;border-color:#f0d48a}
@@ -459,6 +450,8 @@ function normRoomObj(o){if(!o)return null;if(o.note===undefined)o.note="";if(o.n
   o.doctor=o.doctor||"";o.therapist=o.therapist||"";o.mask=o.mask||"";o.numb=o.numb||"";o.appt=o.appt||"";o.customer=o.customer||"";
   o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);
   if(o.oxy&&typeof o.oxy==="object"){if(o.oxy.idx===undefined)o.oxy.idx=0;if(!o.oxy.ts)o.oxy.ts=Date.now();o.oxy.paused=!!o.oxy.paused;}else o.oxy=null;
+  if(o.mask||o.numb||o.oxy)o.consult=false; // a running timer always ends a consult
+  if(!o.mask&&!o.numb&&!o.oxy&&o.stage)o.stage=""; // no timer running -> no leftover stage label
   if(o.mask){o.numb="";o.oxy=null;}else if(o.oxy){o.numb="";} // exclusive: mask > oxy > numbing
   return o;}
 function migrate(s){if(!s)return null;if(!s.completed)s.completed=[];if(!s.removed)s.removed=[];if(!s.treatments||!s.treatments.length)s.treatments=[...SEED.treatments];
@@ -576,7 +569,14 @@ function pad(n){return String(n).padStart(2,'0');}
 function curMin(){const d=new Date();return d.getHours()*60+d.getMinutes();}
 function toMin(hm){if(!hm)return null;const[h,m]=hm.split(":").map(Number);return h*60+(m||0);}
 function nowHM(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes());}
-function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
+let toastUndoFn=null,toastTimer=null;
+function toastUndo(){const f=toastUndoFn;toastUndoFn=null;const t=$("toast");t.classList.remove("show","action");if(f)f();}
+function toast(m,undoFn){const t=$("toast");
+  t.innerHTML=esc(m)+(undoFn?' <button class="toastUndo" onclick="toastUndo()">Undo</button>':'');
+  toastUndoFn=undoFn||null;
+  t.classList.toggle('action',!!undoFn);
+  t.classList.add("show");
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>{t.classList.remove("show","action");toastUndoFn=null;},undoFn?7000:1600);}
 function allRooms(){return state.groups.flatMap(g=>g.rooms);}
 function freeRooms(){return allRooms().filter(r=>!state.occ[r]);}
 function thOptions(sel){return ['<option value="">Therapist…</option>'].concat(state.therapists.map(d=>`<option ${d===sel?'selected':''}>${esc(d)}</option>`)).join('');}
@@ -643,8 +643,15 @@ function maskSet(room,hm){const o=state.occ[room];if(!o||!hm)return; // mask ove
 function maskIn(room,mins){if(!state.occ[room])return;let m=(curMin()+mins)%1440;maskSet(room,pad(Math.floor(m/60))+":"+pad(m%60));}
 function maskClear(room){const o=state.occ[room];if(o){o.mask="";if(o.stage==="Mask on")o.stage="";commitRoom(room);}}
 function moveRoomToRoom(from,to){if(!to)return;if(state.occ[to]){toast(to+" is occupied");render();return;}const rv=nextFor(to);if(rv&&rv.from!==from){toast(to+" is reserved for "+rv.customer);render();return;}
+  const cust=state.occ[from]?state.occ[from].customer:"";
   state.occ[to]=state.occ[from];state.occ[to].nextRoom="";state.occ[from]=null;
-  cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));}
+  cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));
+  toast(cust+" moved to "+to,()=>{
+    if(state.occ[from]){toast(from+" is occupied \u2014 can't undo");return;}
+    if(!state.occ[to]||state.occ[to].customer!==cust){toast("Too late to undo");return;}
+    state.occ[from]=state.occ[to];state.occ[to]=null;
+    cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));
+    toast("Moved back to "+from);});}
 function roomToQueue(room){const o=state.occ[room];if(!o)return;const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
   state.queue.push(q);state.occ[room]=null;
   cloudPatch(Object.assign(queuePatch(q),roomPatch(room)));}
@@ -697,7 +704,8 @@ function oxyPause(room){const o=state.occ[room];if(!o||!o.oxy)return;const x=o.o
   commitRoom(room);}
 function oxyEnd(room){const o=state.occ[room];if(!o)return;const p=oxyPos(o);
   if(p&&p.i>=OXY_STEPS.length-1)markOxyDone(o); // reached the last step \u2014 treat as finished even without a mask
-  o.oxy=null;editingOxyRoom=null;commitRoom(room);}
+  o.oxy=null;if(o.stage==="Treatment ongoing")o.stage="";editingOxyRoom=null;commitRoom(room);}
+function oxyEndThenNumb(room){oxyEnd(room);numbToggle(room);}
 function oxyFinishToMask(room){maskIn(room,OXY_MASK_MIN);}
 function oxyDoneToMask(room){maskIn(room,OXY_MASK_MIN);} // one tap: finish last step + start mask
 
@@ -718,8 +726,8 @@ function theraModeRow(room,o){
   }else if(o.numb){const d=toMin(o.numb)-curMin();
     main=`<button class="focusTrigger${d<0?' over':(d<=2?' soon':'')}" data-trig="${esc(room)}" data-trigmode="numb" onclick="openFocus('${jsq(room)}','numb')">Numb \u00b7 ${d<0?'done '+(-d)+'m ago':d+'m left'}</button>`;
     others=[['Mask','mask'],['Oxy','oxy']];
-  }else if(oxyPos(o)){
-    main=`<button class="focusTrigger go" data-trig="${esc(room)}" data-trigmode="oxy" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 ${esc(oxyLabel(oxyPos(o)))}</button>`;
+  }else if(oxyPos(o)){const pp=oxyPos(o);
+    main=`<button class="focusTrigger go" data-trig="${esc(room)}" data-trigmode="oxy" onclick="openFocus('${jsq(room)}','oxy')">${pp.fin?'\u2713 Oxy done':'\u25b6 '+esc(oxyLabel(pp))}</button>`;
     others=[['Numb','numb'],['Mask','mask']];
   }else{
     main=`<button class="focusTrigger${hasOxy?' go':''}" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 Start Oxy</button>`;
@@ -827,8 +835,7 @@ function oxyCtlRow(room,o,big){const isLast=(o.oxy.idx>=OXY_STEPS.length-1);
 function oxyBlock(room,o,mode){ // mode: 'phone' (big controls) | 'board' (minimised, therapist drives it)
   const p=oxyPos(o);const phone=mode==='phone';
   if(!p)return "";
-  if(p.fin){
-    return `<div class="oxybox mini"><div class="oxyline"><span>Oxy done</span><span style="flex:1"></span><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">\u25b6 Start mask</button><button class="maskx" title="dismiss" onclick="oxyEnd('${jsq(room)}')">\u2715</button></div></div>`;}
+  if(p.fin)return ""; // handled inline by stageChipsRow now \u2014 no separate box
   const remHtml=o.oxy.paused?'<span class="oxyrem">\u23f8 paused</span>':`<span class="oxyrem${p.remS<=60?' over':(p.remS<=120?' soon':'')}" data-oxyt="${esc(room)}">~${fmtRem(p.remS)} left</span>`;
   const line=`<div class="oxyline">${oxyDots(p.i)} <span data-oxyl="${esc(room)}">${esc(oxyLabel(p))}</span> ${remHtml}</div>`;
   if(phone)return `<div class="oxybox${o.oxy.paused?' paused':''}">${line}${oxyCtlRow(room,o,true)}</div>`;
@@ -874,7 +881,7 @@ function refreshTimers(){try{
       const mode=el.getAttribute('data-trigmode');
       if(mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent="Mask \u00b7 "+(d<0?'overdue '+(-d)+'m':'in '+d+'m');el.classList.toggle('over',d<0);el.classList.toggle('soon',d>=0&&d<=5);}
       else if(mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent="Numb \u00b7 "+(d<0?'done '+(-d)+'m ago':d+'m left');el.classList.toggle('over',d<0);el.classList.toggle('soon',d>=0&&d<=2);}
-      else if(mode==='oxy'&&p)el.textContent="\u25b6 "+oxyLabel(p);
+      else if(mode==='oxy'&&p)el.textContent=p.fin?"\u2713 Oxy done":"\u25b6 "+oxyLabel(p);
     });
   });
   if(typeof theraFocus!=='undefined'&&theraFocus){
@@ -905,7 +912,7 @@ function closeMenu(){const m=$("moreMenu");if(m)m.classList.remove("show");}
 /* ===== render dispatch ===== */
 function maskRel(hm){if(!hm)return"";const m=toMin(hm);if(m==null)return"";let d=m-curMin();
   if(d>=0)return `<span class="rel ${d<=5?'soon':''}">in ${d}m</span>`;return `<span class="rel over">${-d}m ago</span>`;}
-function maskClass(o){const t=o.mask||o.numb;if(!t)return"";const d=toMin(t)-curMin();if(d<0)return" maskOver";if(d<=5)return" maskSoon";return"";}
+function maskClass(o){const t=o.mask||o.numb;if(!t)return"";const soonAt=o.mask?5:2;const d=toMin(t)-curMin();if(d<0)return" maskOver";if(d<=soonAt)return" maskSoon";return"";}
 function docInline(id,doc){return editingDocId===id?`<select id="activeEdit" onblur="cancelEdit()" onchange="qSetDoctor(${id},this.value)" style="flex:1">${docOptions(doc)}</select>`:`<span class="docline">${esc(doc)||'no doctor'}</span><button class="docedit" title="change doctor" onclick="editDoc(${id})">✎</button>`;}
 
 function usePhoneUI(){return ROLE==='doctor'||ROLE==='therapist'||(ROLE==='consultant'&&window.innerWidth<=820);}
@@ -962,7 +969,7 @@ function roomCard(room){
       <div class="cust">${esc(o.customer)}</div>
       <div class="fieldrow"><label>Doctor</label><div style="flex:1;display:flex;align-items:center;gap:4px;padding-top:6px">${docEl}</div></div>
       ${o.consult?'':`<div class="fieldrow"><label>Thera.</label><div style="flex:1;display:flex;align-items:center;gap:4px;padding-top:6px">${theraEl}</div></div>`}
-      ${o.consult?'':`<div class="fieldrow"><label>${picking?(editingNumbRoom===room?'Numb for':'Mask for'):'Timer'}</label><div style="flex:1;display:flex;align-items:center;gap:6px;padding-top:4px;flex-wrap:wrap">${oxyPos(o)?`<span style="font-weight:700;color:var(--head)" data-oxyn="${esc(room)}">${esc(oxyNum(oxyPos(o)))}</span>`:''}${picking?'':stageChipsRow(room,o)}</div></div>`}
+      ${o.consult?'':`<div class="fieldrow"><label>${picking?(editingNumbRoom===room?'Numb for':'Mask for'):'Timer'}</label><div style="flex:1;display:flex;align-items:center;gap:6px;padding-top:4px;flex-wrap:wrap">${(oxyPos(o)&&!oxyPos(o).fin)?`<span style="font-weight:700;color:var(--head)" data-oxyn="${esc(room)}">${esc(oxyNum(oxyPos(o)))}</span>`:''}${picking?'':stageChipsRow(room,o)}</div></div>`}
       ${picking?`<div class="moderow">${stageChipsRow(room,o)}</div>`:''}
       ${consultBlock(room,o)}
       ${oxyBlock(room,o,'board')}
@@ -1111,7 +1118,10 @@ function stageChipsRow(room,o){
       [5,10,15].map(m=>`<button class="chip" onclick="maskIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
       `<input class="timein" style="width:66px" title="exact time" placeholder="345" onchange="maskSet('${jsq(room)}',parseTimeInput(this.value))">`+
       `<button class="maskx" title="cancel" onclick="maskToggle('${jsq(room)}')">\u2715</button></div></div>`;}
-  if(oxyPos(o))return ""; // Oxy running \u2014 its own bar holds the controls
+  const oxp=oxyPos(o);
+  if(oxp&&!oxp.fin)return ""; // Oxy actively counting down \u2014 its own bar holds the controls
+  if(oxp&&oxp.fin)
+    return `<div class="stagechips"><span class="slabel">Oxy done \u2192</span><button class="chip" onclick="oxyEndThenNumb('${jsq(room)}')">Numb</button><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">Mask</button><button class="maskx" title="dismiss" onclick="oxyEnd('${jsq(room)}')">\u2715</button></div>`;
   let h=`<div class="stagechips">`;
   h+=`<button class="chip" title="start a numbing timer" onclick="numbToggle('${jsq(room)}')">Numb</button>`;
   h+=`<button class="chip" title="start Oxy steps" onclick="oxyStart('${jsq(room)}')">Oxy</button>`;
