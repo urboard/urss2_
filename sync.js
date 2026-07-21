@@ -62,7 +62,7 @@ function toQueueItem(appt) {
     customer: appt.CustomerName || "",
     doctor: appt.ResourceName || "",
     therapist: "",
-    treatment: [], // TODO: map real CRM field once its name is confirmed
+    treatment: appt.Description ? [appt.Description] : [], // ASSUMPTION: Description holds the treatment/service name — confirm with a real (non-deleted) row before trusting this
     appt: toHHMM(appt.StartTime),
     arrivedAt: "",
     consult: false,
@@ -96,7 +96,12 @@ async function main() {
       // if it had come from JSON.
       const { parse } = require("csv-parse/sync");
       try {
-        return parse(text, { columns: true, skip_empty_lines: true });
+        return parse(text, {
+          columns: true,
+          skip_empty_lines: true,
+          relax_quotes: true, // tolerate a stray unescaped " inside a field instead of treating it as an open quote that swallows the rest of the file
+          relax_column_count: true, // tolerate rows with an unexpected number of columns rather than throwing
+        });
       } catch (parseErr) {
         console.error("CSV parse failed. Diagnostic info:");
         console.error("  Response length:", text.length, "characters");
