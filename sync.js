@@ -63,7 +63,7 @@ function toQueueItem(appt) {
     id: crmKey(appt), // MUST match the Firebase key this is written under (see main()) — the board reads this field back to build every action button (assign room, set therapist, etc). Without it, every button on a synced card would silently act on `undefined`.
     source: "crm", // lets the board's reset function spare synced appointments instead of wiping them
     customer: appt.CustomerName || "",
-    doctor: appt.ResourceName || "",
+    doctor: /^DR/i.test(appt.ResourceName || "") ? appt.ResourceName : "",
     therapist: "",
     treatment: appt.Description ? [appt.Description] : [], // ASSUMPTION: Description holds the treatment/service name — confirm with a real (non-deleted) row before trusting this
     appt: toHHMM(appt.StartTime),
@@ -168,7 +168,10 @@ async function main() {
     }
   })();
 
-  const targetDate = tomorrowCrmDateString();
+  const targetDate = process.env.TARGET_DATE || tomorrowCrmDateString();
+  if (process.env.TARGET_DATE) {
+    console.log(`Using manually specified date override: ${targetDate} (instead of tomorrow)`);
+  }
   console.log(`Filtering for StartDate = ${targetDate}`);
 
   const kept = all.filter(
