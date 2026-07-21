@@ -86,7 +86,23 @@ async function main() {
     headers: { Authorization: `Basic ${basicAuth}` },
   });
   if (!res.ok) throw new Error(`CRM fetch failed: ${res.status} ${res.statusText}`);
-  const all = await res.json();
+  const all = await (async () => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      // Don't print the full response — it may contain patient data.
+      // Print only enough structure to diagnose the shape of the problem.
+      console.error("Response was not valid JSON. Diagnostic info:");
+      console.error("  HTTP status:", res.status);
+      console.error("  Content-Type:", res.headers.get("content-type"));
+      console.error("  Response length:", text.length, "characters");
+      console.error("  First 20 chars:", JSON.stringify(text.slice(0, 20)));
+      console.error("  Last 20 chars:", JSON.stringify(text.slice(-20)));
+      console.error("  Char at position 14:", JSON.stringify(text.slice(10, 20)));
+      throw parseErr;
+    }
+  })();
 
   const targetDate = tomorrowCrmDateString();
   console.log(`Filtering for StartDate = ${targetDate}`);
