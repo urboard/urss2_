@@ -14,13 +14,14 @@ const admin = require("firebase-admin");
 // board's public HTML), so they're hardcoded here for simplicity. Only the
 // service-account key per branch is sensitive, and that's read from env.
 const BRANCHES = {
-  GL:  { dbURL: "https://urgreenlane-default-rtdb.firebaseio.com" },
-  SS2: { dbURL: "https://urss2-8597b-default-rtdb.asia-southeast1.firebasedatabase.app" },
-  RU:  { dbURL: "https://urru-f9b89-default-rtdb.asia-southeast1.firebasedatabase.app" },
-  MA:  { dbURL: "https://urma-f8632-default-rtdb.asia-southeast1.firebasedatabase.app" },
-  SU:  { dbURL: "https://ursu-44644-default-rtdb.asia-southeast1.firebasedatabase.app" },
-  BM:  { dbURL: "https://urbm-d3279-default-rtdb.asia-southeast1.firebasedatabase.app" },
+  GL:  { dbURL: "https://urgreenlane-default-rtdb.firebaseio.com", schema: "v1" },
+  SS2: { dbURL: "https://urss2-8597b-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v2" },
+  RU:  { dbURL: "https://urru-f9b89-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
+  MA:  { dbURL: "https://urma-f8632-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
+  SU:  { dbURL: "https://ursu-44644-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
+  BM:  { dbURL: "https://urbm-d3279-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
 };
+// NOTE: when GL moves to v2, just change its schema above to "v2" — nothing else needs to change.
 
 // ---- Helpers ---------------------------------------------------------------
 
@@ -218,28 +219,48 @@ async function main() {
       code // unique app name per branch, since we're doing several in one run
     );
 
-    // Clean slate: clear rooms, queue, completed, and removed every night.
-    // This is what replaces the manual Reset button / JSON upload entirely.
-    // `lists` (doctors, therapists, treatments, room layout) lives on its
-    // own separate node and is never touched by this call.
-    await app.database().ref("board_v2").update({
-      occ: null,
-      queue: null,
-      completed: null,
-      removed: null,
-    });
-    console.log(`${code}: cleared rooms/queue/completed/removed`);
-
     const updates = {};
     for (const appt of appts) {
       updates[crmKey(appt)] = toQueueItem(appt);
     }
 
-    if (Object.keys(updates).length) {
-      await app.database().ref("board_v2/queue").update(updates);
-      console.log(`${code}: wrote ${Object.keys(updates).length} appointment(s)`);
+    if (branchCfg.schema === "v2") {
+      // Sectioned schema (SS2 only, for now). Clean slate every night:
+      // clear rooms, queue, completed, removed. `board_v2/lists` (doctors,
+      // therapists, treatments, room layout) lives on its own separate
+      // node and is never touched by this call.
+      await app.database().ref("board_v2").update({
+        occ: null,
+        queue: null,
+        completed: null,
+        removed: null,
+      });
+      console.log(`${code}: cleared rooms/queue/completed/removed (v2)`);
+
+      if (Object.keys(updates).length) {
+        await app.database().ref("board_v2/queue").update(updates);
+        console.log(`${code}: wrote ${Object.keys(updates).length} appointment(s)`);
+      } else {
+        console.log(`${code}: nothing to write for ${targetDate}`);
+      }
     } else {
-      console.log(`${code}: nothing to write for ${targetDate}`);
+      // v1: single JSON blob at path "board" (not sectioned into child
+      // nodes). We don't know the exact name of whatever key holds
+      // doctor/therapist/treatment/room lists in this older schema, so
+      // rather than guess, we read the whole blob, replace ONLY the 4
+      // known-transient keys, and write the whole thing back — anything
+      // else in the blob is preserved untouched by construction.
+      const snapshot = await app.database().ref("board").once("value");
+      const existing = snapshot.val() || {};
+      const newBlob = {
+        ...existing,
+        occ: {},
+        queue: updates,
+        completed: [],
+        removed: [],
+      };
+      await app.database().ref("board").set(newBlob);
+      console.log(`${code}: cleared rooms/queue/completed/removed and wrote ${Object.keys(updates).length} appointment(s) (v1)`);
     }
 
     await app.delete(); // clean up before initializing the next branch's app
