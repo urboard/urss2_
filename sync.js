@@ -59,6 +59,8 @@ function crmKey(appt) {
 // here once known (one line).
 function toQueueItem(appt) {
   return {
+    id: crmKey(appt), // MUST match the Firebase key this is written under (see main()) — the board reads this field back to build every action button (assign room, set therapist, etc). Without it, every button on a synced card would silently act on `undefined`.
+    source: "crm", // lets the board's reset function spare synced appointments instead of wiping them
     customer: appt.CustomerName || "",
     doctor: appt.ResourceName || "",
     therapist: "",
@@ -215,6 +217,18 @@ async function main() {
       },
       code // unique app name per branch, since we're doing several in one run
     );
+
+    // Clean slate: clear rooms, queue, completed, and removed every night.
+    // This is what replaces the manual Reset button / JSON upload entirely.
+    // `lists` (doctors, therapists, treatments, room layout) lives on its
+    // own separate node and is never touched by this call.
+    await app.database().ref("board_v2").update({
+      occ: null,
+      queue: null,
+      completed: null,
+      removed: null,
+    });
+    console.log(`${code}: cleared rooms/queue/completed/removed`);
 
     const updates = {};
     for (const appt of appts) {
