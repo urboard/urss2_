@@ -150,15 +150,21 @@ async function main() {
       // if it had come from JSON.
       const { parse } = require("csv-parse/sync");
       try {
+        // Keep REAL quote handling (so commas inside quoted fields don't split
+        // columns) but SKIP the few malformed records instead of giving up on
+        // the whole file. This is what stops one stray quote from forcing the
+        // crude comma-splitter that misaligned every comma-containing row.
         return parse(text, {
           columns: true,
           skip_empty_lines: true,
-          relax_quotes: true, // tolerate a stray unescaped " inside a field instead of treating it as an open quote that swallows the rest of the file
-          relax_column_count: true, // tolerate rows with an unexpected number of columns rather than throwing
+          relax_quotes: true,
+          relax_column_count: true,
+          skip_records_with_error: true, // drop only the broken rows, stay aligned
+          bom: true,
         });
       } catch (parseErr) {
-        console.error("Tolerant CSV parse still failed:", parseErr.code || parseErr.message);
-        console.error("Retrying with quote handling disabled (last resort)...");
+        console.error("Resilient CSV parse still threw:", parseErr.code || parseErr.message);
+        console.error("Retrying with quote handling disabled (last resort — may misalign)...");
         try {
           // WARNING: this treats " as a plain character and splits only on
           // commas. Any field that legitimately contains a comma (e.g. a
@@ -223,14 +229,31 @@ async function main() {
   {
     const keys = all.length ? Object.keys(all[0]) : [];
     console.log("CRM COLUMNS:", JSON.stringify(keys));
-    for (const k of keys) {
-      const vals = [...new Set(all.map((r) => (r[k] == null ? "" : String(r[k]))))];
-      if (vals.length <= 30) {
-        console.log(`  distinct ${k} (${vals.length}):`, JSON.stringify(vals));
-      } else {
-        console.log(`  ${k}: ${vals.length} distinct values (skipped as likely free-text/PII)`);
-      }
+    console.log(`Parsed rows: ${all.length}`);
+    // Categorical columns that are safe to print in full — resource/status/
+    // branch codes, not personal data. If a CLEAN parse worked these are
+    // small; if any is still huge, columns are still misaligning.
+    const CATEGORICAL = ["customerType", "Status", "BranchID", "ResourceName"];
+    for (const k of CATEGORICAL) {
+      if (!keys.includes(k)) continue;
+      const vals = [...new Set(all.map((r) => (r[k] == null ? "" : String(r[k]).trim())))].sort();
+      const shown = vals.length <= 200 ? vals : vals.slice(0, 200);
+      console.log(`  ${k}: ${vals.length} distinct${vals.length > 200 ? " (first 200)" : ""} => ${JSON.stringify(shown)}`);
     }
+    // What real rows for the target date look like (customer name masked, so no
+    // personal data is printed) — confirms which column holds the doctor and
+    // how a cancelled row is marked.
+    const mask = (s) => { s = String(s || ""); return s ? s[0] + "***" : ""; };
+    const onDate = all.filter((r) => r.StartDate === targetDate);
+    console.log(`Rows with StartDate=${targetDate}: ${onDate.length}`);
+    console.log("Sample rows for that date [CustomerName masked]:");
+    onDate.slice(0, 15).forEach((r, i) => {
+      console.log(`  #${i} ` + JSON.stringify({
+        ResourceName: r.ResourceName, Status: r.Status, BranchID: r.BranchID,
+        StartTime: r.StartTime, EndTime: r.EndTime, customerType: r.customerType,
+        CustomerName: mask(r.CustomerName),
+      }));
+    });
   }
   // ===================== END TEMPORARY DIAGNOSTIC =====================
 
