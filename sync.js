@@ -14,7 +14,7 @@ const admin = require("firebase-admin");
 // board's public HTML), so they're hardcoded here for simplicity. Only the
 // service-account key per branch is sensitive, and that's read from env.
 const BRANCHES = {
-  GL:  { dbURL: "https://urgreenlane-default-rtdb.firebaseio.com", schema: "v1" },
+  GL:  { dbURL: "https://urgreenlane-default-rtdb.firebaseio.com", schema: "v2" },
   SS2: { dbURL: "https://urss2-8597b-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v2" },
   RU:  { dbURL: "https://urru-f9b89-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
   MA:  { dbURL: "https://urma-f8632-default-rtdb.asia-southeast1.firebasedatabase.app", schema: "v1" },
@@ -54,22 +54,62 @@ function crmKey(appt) {
   return `crm-${safe(appt.customerID)}-${safe(appt.StartDate)}-${safe(appt.StartTime)}`;
 }
 
-// Map one CRM appointment into the shape the board's queue items expect.
-// NOTE: no confirmed "treatment"/service field name has been seen in the CRM
-// feed yet — leaving it blank rather than guessing. Add the real field name
-// here once known (one line).
-function toQueueItem(appt) {
+// Statuses that mean "this appointment is not happening" — excluded from the
+// board. DELETED was the only one handled before, which is why CANCELLED rows
+// were still showing up.
+// TODO(confirm-with-CRM-sample): these are the expected spellings; verify the
+// exact Status strings your CRM emits (cancelled / no-show) and adjust.
+const DROP_STATUSES = new Set([
+  "DELETED", "CANCELLED", "CANCELED", "NOSHOW", "NO SHOW", "NO-SHOW",
+]);
+function isDropped(appt) {
+  return DROP_STATUSES.has(String(appt.Status || "").toUpperCase().trim());
+}
+
+// Pull the doctor name. Some rows come through blank because the doctor isn't
+// always in ResourceName, or doesn't start with "DR".
+// TODO(confirm-with-CRM-sample): confirm which column actually holds the
+// doctor (ResourceName? DoctorName? StaffName?) and set it here — this is the
+// second half of the "appointments without doctor names" fix.
+function pickDoctor(appt) {
+  const r = appt.ResourceName || "";
+  return /^\s*DR/i.test(r) ? r.trim() : "";
+}
+
+// Per request, the board only pulls four fields: appointment DATE, TIME,
+// customer name, doctor name. Treatment/service is intentionally NOT synced.
+
+// v2 boards (SS2, GL) read a sectioned schema; the item id MUST equal the
+// Firebase key it's written under, so actions write back to the same node.
+function toV2Item(appt) {
   return {
-    id: crmKey(appt), // MUST match the Firebase key this is written under (see main()) — the board reads this field back to build every action button (assign room, set therapist, etc). Without it, every button on a synced card would silently act on `undefined`.
-    source: "crm", // lets the board's reset function spare synced appointments instead of wiping them
+    id: crmKey(appt), // MUST match the Firebase key this is written under (see main())
+    source: "crm",    // lets the board's reset spare synced appointments
     customer: appt.CustomerName || "",
-    doctor: /^DR/i.test(appt.ResourceName || "") ? appt.ResourceName : "",
+    doctor: pickDoctor(appt),
     therapist: "",
-    treatment: appt.Description ? [appt.Description] : [], // ASSUMPTION: Description holds the treatment/service name — confirm with a real (non-deleted) row before trusting this
+    treatment: [],
     appt: toHHMM(appt.StartTime),
+    apptDate: appt.StartDate || "", // item 4: the date this appointment is for
     arrivedAt: "",
     consult: false,
     consultant: "",
+  };
+}
+
+// v1 boards (RU, MA, SU, BM) read a single stringified JSON blob and render
+// `onclick="fn(${id})"` UNQUOTED — so their ids must be NUMBERS, not the
+// "crm-..." string key, or every button on a synced card is invalid JS.
+function toV1Item(appt, idNum) {
+  return {
+    id: idNum,
+    customer: appt.CustomerName || "",
+    doctor: pickDoctor(appt),
+    therapist: "",
+    treatment: [],
+    appt: toHHMM(appt.StartTime),
+    apptDate: appt.StartDate || "",
+    arrivedAt: "",
   };
 }
 
@@ -174,8 +214,28 @@ async function main() {
   }
   console.log(`Filtering for StartDate = ${targetDate}`);
 
+  // ======================= TEMPORARY DIAGNOSTIC =======================
+  // Prints the real CRM column names, and the distinct values of every
+  // LOW-cardinality column (Status, Branch, Resource, etc.). High-cardinality
+  // columns like customer name / phone are skipped, so no personal data is
+  // logged. Paste the "CRM COLUMNS" + "distinct" lines back to finalize the
+  // field mapping, then DELETE this whole block.
+  {
+    const keys = all.length ? Object.keys(all[0]) : [];
+    console.log("CRM COLUMNS:", JSON.stringify(keys));
+    for (const k of keys) {
+      const vals = [...new Set(all.map((r) => (r[k] == null ? "" : String(r[k]))))];
+      if (vals.length <= 30) {
+        console.log(`  distinct ${k} (${vals.length}):`, JSON.stringify(vals));
+      } else {
+        console.log(`  ${k}: ${vals.length} distinct values (skipped as likely free-text/PII)`);
+      }
+    }
+  }
+  // ===================== END TEMPORARY DIAGNOSTIC =====================
+
   const kept = all.filter(
-    (a) => a.Status !== "DELETED" && a.StartDate === targetDate
+    (a) => !isDropped(a) && a.StartDate === targetDate
   );
   console.log(`${all.length} total rows -> ${kept.length} after filtering`);
 
@@ -222,24 +282,22 @@ async function main() {
       code // unique app name per branch, since we're doing several in one run
     );
 
-    const updates = {};
-    for (const appt of appts) {
-      updates[crmKey(appt)] = toQueueItem(appt);
-    }
-
     if (branchCfg.schema === "v2") {
-      // Sectioned schema (SS2 only, for now). Clean slate every night:
+      // Sectioned schema (SS2, GL). Clean slate every night (item 5):
       // clear rooms, queue, completed, removed. `board_v2/lists` (doctors,
       // therapists, treatments, room layout) lives on its own separate
-      // node and is never touched by this call.
+      // node and is never touched, so the lists survive.
       await app.database().ref("board_v2").update({
         occ: null,
         queue: null,
         completed: null,
         removed: null,
+        syncDate: targetDate, // item 4: board shows "Appointments for <date>"
       });
       console.log(`${code}: cleared rooms/queue/completed/removed (v2)`);
 
+      const updates = {};
+      for (const appt of appts) updates[crmKey(appt)] = toV2Item(appt);
       if (Object.keys(updates).length) {
         await app.database().ref("board_v2/queue").update(updates);
         console.log(`${code}: wrote ${Object.keys(updates).length} appointment(s)`);
@@ -247,23 +305,49 @@ async function main() {
         console.log(`${code}: nothing to write for ${targetDate}`);
       }
     } else {
-      // v1: single JSON blob at path "board" (not sectioned into child
-      // nodes). We don't know the exact name of whatever key holds
-      // doctor/therapist/treatment/room lists in this older schema, so
-      // rather than guess, we read the whole blob, replace ONLY the 4
-      // known-transient keys, and write the whole thing back — anything
-      // else in the blob is preserved untouched by construction.
+      // v1: the board stores its ENTIRE state as one JSON *string* at path
+      // "board", and its listener only reacts when the value is a string
+      // (`typeof v === "string"`). The previous version wrote a plain object
+      // here, which every v1 board silently ignored — that's why only SS2
+      // (v2) ever showed appointments.
+      //
+      // Fix: read the current string blob, parse it, replace ONLY the
+      // transient keys (rooms/queue/completed/removed) + stamp the date,
+      // keep everything else (doctor/therapist/treatment/room lists), and
+      // write it back AS A STRING. Queue is an ARRAY with NUMERIC ids, which
+      // is exactly what the v1 board expects.
       const snapshot = await app.database().ref("board").once("value");
-      const existing = snapshot.val() || {};
-      const newBlob = {
+      const raw = snapshot.val();
+      let existing = {};
+      if (typeof raw === "string") {
+        try { existing = JSON.parse(raw); } catch (e) { existing = {}; }
+      } else if (raw && typeof raw === "object") {
+        existing = raw; // tolerate a legacy object blob
+      }
+
+      // Rebuild an empty occupancy map for whatever rooms the board has.
+      const occ = {};
+      (existing.groups || []).forEach((g) =>
+        (g.rooms || []).forEach((r) => { occ[r] = null; })
+      );
+
+      // Numeric ids from a high base so they never collide with the small
+      // sequential ids the board hands to manually-added walk-ins.
+      const ID_BASE = 1000000000000;
+      const queueArr = appts.map((appt, i) => toV1Item(appt, ID_BASE + i));
+
+      const newState = {
         ...existing,
-        occ: {},
-        queue: updates,
+        occ,
+        queue: queueArr,
         completed: [],
         removed: [],
+        syncDate: targetDate, // item 4
+        seq: Math.max(existing.seq || 1, ID_BASE + appts.length + 1),
       };
-      await app.database().ref("board").set(newBlob);
-      console.log(`${code}: cleared rooms/queue/completed/removed and wrote ${Object.keys(updates).length} appointment(s) (v1)`);
+
+      await app.database().ref("board").set(JSON.stringify(newState)); // MUST be a string
+      console.log(`${code}: cleared board and wrote ${queueArr.length} appointment(s) (v1)`);
     }
 
     await app.delete(); // clean up before initializing the next branch's app
