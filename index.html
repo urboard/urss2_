@@ -142,7 +142,7 @@
   .settings textarea{width:100%;height:74px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:4px}
   .settings .grp{margin-bottom:12px}.settings .grp label{font-weight:700;font-size:13px}
   .hint{font-size:12px;color:var(--muted)}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2d33;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;opacity:0;transition:opacity .2s;z-index:99;pointer-events:none}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2d33;color:#fff;padding:10px 18px;border-radius:8px;font-weight:700;opacity:0;transition:opacity .2s;z-index:99;pointer-events:none;max-width:calc(100vw - 32px);text-align:center}
   .toast.action{pointer-events:auto}
   .toastUndo{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;font-weight:800;padding:3px 10px;border-radius:6px;cursor:pointer;margin-left:6px}
   .toastUndo:hover{background:rgba(255,255,255,.3)}
@@ -296,15 +296,14 @@
   <button id="undoBtn" class="adminOnly" onclick="undo()" title="Undo the last change (up to 5)" disabled>↶ Undo</button>
   <button class="boardOnly" onclick="openTLog()">👥 By therapist</button>
   <div class="menu-wrap boardOnly">
-    <button class="ghost" onclick="toggleMenu(event)">⋯ More</button>
+    <button class="ghost" onclick="toggleMenu(event)">⋯</button>
     <div class="menu" id="moreMenu" onclick="closeMenu()">
       <button onclick="openRecords()">📒 Records</button>
       <button class="counterOnly" onclick="openBackups()">🗂 Backups</button>
-      <button class="counterOnly" onclick="exportState()">⬇ Save to file</button>
       <button class="counterOnly" onclick="document.getElementById('importer').click()">⬆ Load from file</button>
       <button class="counterOnly" onclick="openSettings()">⚙ Edit lists</button>
       <div class="menu-sep counterOnly"></div>
-      <button class="danger counterOnly" onclick="resetBoard()">↺ Reset board</button>
+      <button class="danger counterOnly" onclick="clearRooms()">↺ Clear rooms</button>
       <button id="logoutBtn" style="display:none" onclick="doLogout()">⎋ Log out</button>
     </div>
   </div>
@@ -676,17 +675,16 @@ function clearRoom(room){const o=state.occ[room];if(o&&!o.therapist){toast("Assi
   cloudPatch(patch);}
 function assignFreeRoom(room,id){if(id)moveQueueToRoom(parseInt(id,10),room);}
 function toggleFilter(v){filterWindow=v;try{localStorage.setItem(LS_FILTER,v?"1":"0");}catch(e){}render();}
-function resetBoard(){if(!isCounter())return;if(!confirm("Reset the board to empty? This clears all rooms, queue, waiting, and today's records. Appointments synced from the CRM are kept. Your doctor/therapist/treatment/room lists are kept."))return;
-  autoBackup();const occ={};allRooms().forEach(r=>occ[r]=null);state.occ=occ;
-  const toRemove=(state.queue||[]).filter(q=>q&&q.source!=="crm"); // only clear manually-added walk-ins
-  const keptQueue=(state.queue||[]).filter(q=>q&&q.source==="crm"); // spare CRM-synced appointments
-  state.queue=keptQueue;state.completed=[];state.removed=[];
-  if(baseRef){try{
-    const patch={occ:null,completed:null,removed:null};
-    toRemove.forEach(q=>{patch["queue/"+q.id]=null;}); // delete only the walk-ins; synced entries are never referenced, so they're left alone
-    baseRef.update(patch);
-  }catch(e){}}
-  saveLocal();recordHistory();render();toast("Board reset"+(keptQueue.length?` (kept ${keptQueue.length} synced appointment${keptQueue.length===1?'':'s'})`:""));}
+function clearRooms(){if(!isCounter())return;if(!confirm("Move everyone out of rooms and back to appointments? Rooms become free and each customer returns to the appointments list — nobody is deleted. Appointments and today's records are kept."))return;
+  autoBackup();
+  const patch={};let n=0;
+  allRooms().forEach(r=>{const o=state.occ[r];if(!o)return;n++;
+    const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
+    state.queue.push(q);state.occ[r]=null;
+    Object.assign(patch,queuePatch(q));
+    Object.assign(patch,roomPatch(r));
+  });
+  cloudPatch(patch);toast(n?("Cleared "+n+" room"+(n===1?"":"s")):"No rooms were occupied");}
 
 /* ===== Oxy step engine =====
    o.oxy = {idx, ts, paused, pausedAt}. Position is COMPUTED from
@@ -946,11 +944,64 @@ function updateUndoBtn(){const b=$("undoBtn");if(!b)return;const n=undoStack.len
 function recordHistory(){const cur=JSON.stringify(state);if(cur===histLast)return;
   if(histLast!=null){undoStack.push(histLast);while(undoStack.length>UNDO_MAX)undoStack.shift();}
   histLast=cur;updateUndoBtn();}
+// Compares the snapshot we're restoring TO (restoring) against the state we're
+// leaving behind (leaving) and names the most likely single thing the undone
+// action did, so "Undo" isn't a total mystery. Best-effort, not exhaustive —
+// falls back to a generic message for anything it doesn't recognize.
+function describeUndo(restoring,leaving){
+  try{
+    const custOf=(id,snap)=>{const q=(snap.queue||[]).find(x=>x.id==id);return q?q.customer:null;};
+    const rQ=new Set((restoring.queue||[]).map(q=>q.id)),lQ=new Set((leaving.queue||[]).map(q=>q.id));
+    const vanished=[...rQ].filter(id=>!lQ.has(id)); // was in queue, isn't anymore
+    const appeared=[...lQ].filter(id=>!rQ.has(id)); // wasn't in queue, is now
+    const rooms=new Set([...Object.keys(restoring.occ||{}),...Object.keys(leaving.occ||{})]);
+    const roomLost=[],roomGained=[]; // customer present in restoring but not leaving / vice versa
+    rooms.forEach(r=>{const rO=restoring.occ&&restoring.occ[r],lO=leaving.occ&&leaving.occ[r];
+      if(rO&&!lO)roomLost.push({room:r,cust:rO.customer});
+      if(!rO&&lO)roomGained.push({room:r,cust:lO.customer});});
+    // Match up EVERY vanished/appeared queue id with a room change for the same customer —
+    // not just the first one — so a bulk action (Clear rooms undoing several people at once)
+    // doesn't silently only describe one of them.
+    const toRoom=[],leftoverVanished=[];const gainedLeft=roomGained.slice();
+    vanished.forEach(id=>{const cust=custOf(id,restoring);const i=cust?gainedLeft.findIndex(x=>x.cust===cust):-1;
+      if(i>-1)toRoom.push({cust,room:gainedLeft.splice(i,1)[0].room});else leftoverVanished.push(id);});
+    const toQueue=[],leftoverAppeared=[];const lostLeft=roomLost.slice();
+    appeared.forEach(id=>{const cust=custOf(id,leaving);const i=cust?lostLeft.findIndex(x=>x.cust===cust):-1;
+      if(i>-1)toQueue.push({cust,room:lostLeft.splice(i,1)[0].room});else leftoverAppeared.push(id);});
+    const nothingElse=!leftoverVanished.length&&!leftoverAppeared.length&&!lostLeft.length&&!gainedLeft.length;
+    if(nothingElse&&toRoom.length===1)return `Moved ${toRoom[0].cust} back from ${toRoom[0].room} to appointments`;
+    if(nothingElse&&toRoom.length>1)return `Moved ${toRoom.length} customers back to appointments`;
+    if(nothingElse&&toQueue.length===1)return `Restored ${toQueue[0].cust} to ${toQueue[0].room}`;
+    if(nothingElse&&toQueue.length>1)return `Restored ${toQueue.length} customers to their rooms`;
+    // Whatever's left over correlates with nothing — if BOTH appointments and rooms lost
+    // content in this same step, it's a broad wipe (Reset board), not a single edit.
+    if(leftoverVanished.length&&lostLeft.length)
+      return `Restored the board — ${leftoverVanished.length} appointment${leftoverVanished.length===1?'':'s'}, ${lostLeft.length} room${lostLeft.length===1?'':'s'}`;
+    if(leftoverVanished.length===1){const cust=custOf(leftoverVanished[0],restoring);if(cust)return `Restored ${cust} to appointments`;}
+    if(leftoverVanished.length>1)return `Restored ${leftoverVanished.length} appointments`;
+    if(leftoverAppeared.length===1){const cust=custOf(leftoverAppeared[0],leaving);if(cust)return `Removed ${cust} from appointments`;}
+    if(lostLeft.length===1)return `Restored ${lostLeft[0].cust} to ${lostLeft[0].room}`;
+    if(gainedLeft.length===1)return `${gainedLeft[0].cust} removed from ${gainedLeft[0].room}`;
+    for(const id of lQ){ // same item present both times but something on it changed (doctor, tx, time…)
+      if(rQ.has(id)){
+        const a=JSON.stringify((restoring.queue||[]).find(x=>x.id==id)),b=JSON.stringify((leaving.queue||[]).find(x=>x.id==id));
+        if(a!==b){const cust=custOf(id,leaving);return `Reverted a change for ${cust||'an appointment'}`;}
+      }
+    }
+    for(const r of rooms){
+      const a=JSON.stringify(restoring.occ&&restoring.occ[r]),b=JSON.stringify(leaving.occ&&leaving.occ[r]);
+      if(a!==b){const cust=(leaving.occ&&leaving.occ[r]&&leaving.occ[r].customer)||(restoring.occ&&restoring.occ[r]&&restoring.occ[r].customer);
+        return `Reverted a change in ${r}${cust?' ('+cust+')':''}`;}
+    }
+    return "Undid last change";
+  }catch(e){return "Undid last change";}
+}
 function undo(){if(!undoStack.length){toast("Nothing to undo");return;}
   const prev=undoStack.pop();let st;try{st=migrate(JSON.parse(prev));}catch(e){toast("Could not undo");return;}
+  const desc=describeUndo(st,state);
   state=st;histLast=JSON.stringify(state);
   if(baseRef){try{baseRef.set(fullStateObj(state));}catch(e){}}
-  saveLocal();render();updateUndoBtn();toast("Undid last change");}
+  saveLocal();render();updateUndoBtn();toast(desc);}
 function toggleMenu(e){e.stopPropagation();const m=$("moreMenu");if(m)m.classList.toggle("show");}
 function closeMenu(){const m=$("moreMenu");if(m)m.classList.remove("show");}
 
@@ -977,7 +1028,7 @@ function applyRoleChrome(){
   syncMainVis();
   document.querySelectorAll(".boardOnly").forEach(el=>el.style.display=(board&&!ph)?"":"none");
   document.querySelectorAll(".counterOnly").forEach(el=>el.style.display=isCounter()?"":"none");
-  document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=(board&&!ph)?"":"none");
+  document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=ROLE?"":"none"); // Undo — every role can accidentally delete something, so every role gets it
   $("logoutBtnPhone").style.display=(ph&&cloudOn)?"":"none";
   const chip=$("roleChip");
   if(ROLE){chip.style.display="";const icon={counter:"\ud83d\udda5",consultant:"\ud83e\udded",doctor:"\ud83e\ude7a",therapist:"\ud83d\udc86\ud83c\udffc\u200d\u2640\ufe0f"}[ROLE]||"";
@@ -1357,8 +1408,7 @@ function saveSettings(){const lines=t=>t.value.split("\n").map(x=>x.trim()).filt
   closeModal('settingsModal');cloudPatch(patch);toast("Lists saved");}
 function closeModal(id){$(id).classList.remove("show");}
 
-/* ===== export / import (counter only) ===== */
-function exportState(){const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="room-flow-state-"+nowHM().replace(":","")+".json";a.click();toast("State saved to file");}
+/* ===== import (counter only) ===== */
 function importState(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{
     const raw=JSON.parse(r.result);
     if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Array.isArray(raw.queue)){
