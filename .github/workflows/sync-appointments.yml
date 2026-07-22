@@ -1,9 +1,9 @@
 name: Sync CRM appointments
 
 on:
-  schedule:
-    # 10:00 PM Malaysia time (UTC+8) = 14:00 UTC
-    - cron: '0 14 * * *'
+    schedule:
+    # 10:13 PM Malaysia time (UTC+8) = 14:13 UTC — off the exact hour, dodges GitHub's peak scheduling congestion
+    - cron: '13 14 * * *'
   workflow_dispatch:
     inputs:
       target_date:
