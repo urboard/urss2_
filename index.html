@@ -278,10 +278,10 @@
   .qmore:hover{background:#eef3f4;color:var(--accent)}
   .qdoc{font-size:12px;color:var(--head);font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .theraSel{width:120px;font-size:12px;padding:3px 6px}
-  .qexp{margin-top:8px}
+  .qexp{margin-top:8px;display:flex;flex-direction:column;gap:8px}
   .qrowB{display:flex;align-items:center;gap:8px}
   .qrowB .txwrap{flex:1;min-width:0}
-  .sendSel{flex:none;width:150px}
+  .sendSel{flex:1;min-width:0}
   .qx{flex:none;background:#e3e9eb;border:0;border-radius:6px;color:var(--ink);font-size:13px;font-weight:700;padding:6px 9px;cursor:pointer}
 
 </style>
@@ -646,7 +646,7 @@ function roomTxUndo(room,i){const o=state.occ[room];if(!o)return;o.txDone=txArr(
 function roomSetNext(room,v){const o=state.occ[room];if(o){o.nextRoom=v;commitRoom(room);}}
 function nextFor(room){for(const r of allRooms()){const o=state.occ[r];if(o&&o.nextRoom===room)return {customer:o.customer,from:r};}return null;}
 function maskSet(room,hm){const o=state.occ[room];if(!o||!hm)return; // mask overrules: Oxy done, no numbing, stage = Mask on
-  o.mask=hm;o.oxy=null;o.numb="";o.consult=false;o.stage="Mask on";
+  o.mask=hm;o.oxy=null;o.numb="";o.consult=false;o.stage="Mask on";o.numbRemovedAt="";
   markOxyDone(o);
   editingNumbRoom=null;editingOxyRoom=null;editingMaskRoom=null;commitRoom(room);}
 function maskIn(room,mins){if(!state.occ[room])return;let m=(curMin()+mins)%1440;maskSet(room,pad(Math.floor(m/60))+":"+pad(m%60));}
@@ -656,6 +656,7 @@ function moveRoomToRoom(from,to){if(!to)return;if(state.occ[to]){toast(to+" is o
   const prevNext=state.occ[from]?state.occ[from].nextRoom:""; // remember the reservation so undo can restore it
   state.occ[to]=state.occ[from];state.occ[to].nextRoom="";
   state.occ[to].consult=false;state.occ[to].consultant="";state.occ[to].consultTs=0; // moving rooms means treatment has commenced
+  state.occ[to].numbRemovedAt="";
   state.occ[from]=null;
   cloudPatch(Object.assign(roomPatch(from),roomPatch(to)));
   toast(cust+" moved to "+to,()=>{
@@ -703,7 +704,7 @@ function oxyLabel(p){const i=Math.min(p.i,OXY_STEPS.length-1);return "Oxy "+(i+1
 function oxyNum(p){return p.fin?"Oxy done":("Oxy "+(Math.min(p.i,OXY_STEPS.length-1)+1)+"/5");}
 function oxyStepName(p){return OXY_STEPS[Math.min(p.i,OXY_STEPS.length-1)][0];}
 function oxyStart(room){const o=state.occ[room];if(!o)return;o.oxy={idx:0,ts:Date.now(),paused:false,pausedAt:0};
-  o.stage="Treatment ongoing";o.numb="";o.mask="";o.consult=false; // exclusive
+  o.stage="Treatment ongoing";o.numb="";o.mask="";o.consult=false;o.numbRemovedAt=""; // exclusive
   if(!txArr(o.treatment).concat(txArr(o.txDone)).some(t=>/^oxy\b|^oxyinfus/i.test(t)))o.treatment=txArr(o.treatment).concat(["Oxy"]);
   editingNumbRoom=null;editingMaskRoom=null;commitRoom(room);}
 function markOxyDone(o){o.treatment=txArr(o.treatment);o.txDone=txArr(o.txDone);
@@ -748,6 +749,9 @@ function theraModeRow(room,o){
   }else if(oxyPos(o)){const pp=oxyPos(o);
     main=`<button class="focusTrigger go" data-trig="${esc(room)}" data-trigmode="oxy" onclick="openFocus('${jsq(room)}','oxy')">${pp.fin?'\u2713 Oxy done':'\u25b6 '+esc(oxyLabel(pp))}</button>`;
     others=[['Numb','numb'],['Mask','mask']];
+  }else if(o.numbRemovedAt){
+    main=`<button class="focusTrigger" onclick="openFocus('${jsq(room)}','numb')">Numb done</button>`;
+    others=[['Oxy','oxy'],['Mask','mask']];
   }else{
     main=`<button class="focusTrigger${hasOxy?' go':''}" onclick="openFocus('${jsq(room)}','oxy')">\u25b6 Start Oxy</button>`;
     others=[['Numb','numb'],['Mask','mask']];
@@ -888,14 +892,15 @@ function statusForDoctor(o){
 let editingNumbRoom=null;
 function numbToggle(room){editingNumbRoom=editingNumbRoom===room?null:room;render();}
 function numbIn(room,mins){const o=state.occ[room];if(!o)return;let m=(curMin()+mins)%1440;
-  o.numb=pad(Math.floor(m/60))+":"+pad(m%60);o.stage="Numbing";o.mask="";o.oxy=null;o.consult=false; // exclusive
+  o.numb=pad(Math.floor(m/60))+":"+pad(m%60);o.stage="Numbing";o.mask="";o.oxy=null;o.consult=false;o.numbRemovedAt=""; // exclusive
   editingNumbRoom=null;editingMaskRoom=null;editingOxyRoom=null;commitRoom(room);}
 function numbClear(room){const o=state.occ[room];if(!o)return;o.numb="";if(o.stage==="Numbing")o.stage="";editingNumbRoom=null;commitRoom(room);}
 function numbSet(room,hm){const o=state.occ[room];if(!o||!hm)return;
-  o.numb=hm;o.stage="Numbing";o.mask="";o.oxy=null;o.consult=false;
+  o.numb=hm;o.stage="Numbing";o.mask="";o.oxy=null;o.consult=false;o.numbRemovedAt="";
   editingNumbRoom=null;editingMaskRoom=null;editingOxyRoom=null;commitRoom(room);}
 function numbBump(room,delta){const o=state.occ[room];if(!o||!o.numb)return;let m=(toMin(o.numb)+delta+1440)%1440;o.numb=pad(Math.floor(m/60))+":"+pad(m%60);commitRoom(room);}
 function numbDone(room){const o=state.occ[room];if(!o)return;o.numb="";if(o.stage==="Numbing")o.stage="";o.numbRemovedAt=nowHM();commitRoom(room);}
+function numbAck(room){const o=state.occ[room];if(!o)return;o.numbRemovedAt="";commitRoom(room);}
 function cssEsc(s){return (window.CSS&&CSS.escape)?CSS.escape(s):String(s).replace(/"/g,'\\"');}
 function refreshTimers(){try{
   allRooms().forEach(r=>{const o=state.occ[r];if(!o)return;const p=oxyPos(o);
@@ -1115,7 +1120,7 @@ function qCard(q){
       <div class="qleft">${timeEl}<span class="qname">${esc(q.customer)}</span><span class="qdoc">${docEl}</span></div>
       <div class="qright"><button class="chip" onclick="qCheckIn(${q.id})">\u2713 Arrived</button><button class="qmore" title="more" onclick="toggleQ(${q.id})">${open?'\u25b4 less':'\u22ef more'}</button></div>
     </div>`;
-  if(open){h+=`<div class="qexp"><div class="qrowB"><div class="txwrap" style="flex:1">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ treatment" onchange="qTxAdd(${q.id},this.value);this.value=''"></div><select class="sendSel" onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('Send to room \u25be')}</select><button class="qx" title="Remove" onclick="removeQueue(${q.id})">\u2715</button></div></div>`;}
+  if(open){h+=`<div class="qexp"><div class="txwrap">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ treatment" onchange="qTxAdd(${q.id},this.value);this.value=''"></div><div class="qrowB"><select class="sendSel" onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('Send to room \u25be')}</select><button class="qx" title="Remove" onclick="removeQueue(${q.id})">\u2715</button></div></div>`;}
   return h+`</div>`;
 }
 
@@ -1174,6 +1179,8 @@ function stageChipsRow(room,o){
   if(oxp&&!oxp.fin)return ""; // Oxy actively counting down \u2014 its own bar holds the controls
   if(oxp&&oxp.fin)
     return `<div class="stagechips"><span class="slabel">Oxy done \u2192</span><button class="chip" onclick="oxyEndThenNumb('${jsq(room)}')">Numb</button><button class="chip go" onclick="oxyFinishToMask('${jsq(room)}')">Mask</button><button class="maskx" title="dismiss" onclick="oxyEnd('${jsq(room)}')">\u2715</button></div>`;
+  if(o.numbRemovedAt)
+    return `<div class="stagechips"><span class="slabel">Numb done</span><button class="chip" onclick="oxyStart('${jsq(room)}')">Oxy</button><button class="chip go" onclick="maskToggle('${jsq(room)}')">Mask</button><button class="maskx" title="dismiss" onclick="numbAck('${jsq(room)}')">\u2715</button></div>`;
   let h=`<div class="stagechips">`;
   h+=`<button class="chip" title="start a numbing timer" onclick="numbToggle('${jsq(room)}')">Numb</button>`;
   h+=`<button class="chip" title="start Oxy steps" onclick="oxyStart('${jsq(room)}')">Oxy</button>`;
