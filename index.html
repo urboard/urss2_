@@ -27,7 +27,9 @@
   header{position:sticky;top:0;z-index:20;background:var(--head);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.12)}
   header h1{font-size:18px;margin:0;font-weight:700}
   .logo{height:30px;width:auto;border-radius:6px;background:#fff;padding:2px}
-  #clock{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.14);padding:3px 10px;border-radius:6px}
+  #clock{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05}
+  .nowbox{display:inline-flex;flex-direction:column;line-height:1.1;opacity:.92}
+  #dateStamp{font-size:11px;font-weight:600;opacity:.72;white-space:nowrap}
   .syncst{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(255,255,255,.16)}
   .syncst.cloud{background:#2e7d32}.syncst.err{background:#b9534f}
   .rolechip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,.22);cursor:pointer}
@@ -272,14 +274,20 @@
   .qright{display:flex;flex-direction:column;gap:5px;align-items:stretch;flex:none}
   .qmore{background:none;border:0;color:var(--muted);cursor:pointer;font-size:12px;padding:3px 6px;border-radius:5px;white-space:nowrap}
   .qmore:hover{background:#eef3f4;color:var(--accent)}
-  .qdoc{font-size:12px;color:var(--head);font-weight:700}
+  .qdoc{font-size:12px;color:var(--head);font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .theraSel{width:120px;font-size:12px;padding:3px 6px}
+  .qexp{margin-top:8px}
+  .qrowB{display:flex;align-items:center;gap:8px}
+  .qrowB .txwrap{flex:1;min-width:0}
+  .sendSel{flex:none;width:150px}
+  .qx{flex:none;background:#e3e9eb;border:0;border-radius:6px;color:var(--ink);font-size:13px;font-weight:700;padding:6px 9px;cursor:pointer}
 
 </style>
 </head>
 <body>
 <header>
   <img class="logo" src="logo.png" alt="" onerror="this.style.display='none'">
-  <h1>SS2 Flow Board</h1><span id="clock">--:--</span><span id="syncst" class="syncst">local</span>
+  <h1>SS2 Flow Board</h1><span class="nowbox"><span id="clock">--:--</span><span id="dateStamp" title="Date of the appointments loaded on this board"></span></span><span id="syncst" class="syncst">local</span>
   <span class="hdrbreak"></span>
   <span class="rolechip" id="roleChip" style="display:none" onclick="openRoleSetup()" title="Tap to switch role/device">…</span>
   <div class="spacer"></div>
@@ -351,13 +359,12 @@
 <div class="modal-bg" id="settingsModal"><div class="modal">
   <h2>Edit lists <span onclick="closeModal('settingsModal')">✕</span></h2>
   <div class="mbody settings">
-    <p class="hint">One item per line. Customers: <code>NAME = Doctor = Therapist</code>.</p>
+    <p class="hint">One item per line.</p>
     <div class="grp"><label>Downstairs rooms</label><textarea id="setDown"></textarea></div>
     <div class="grp"><label>Upstairs rooms</label><textarea id="setUp"></textarea></div>
     <div class="grp"><label>Doctors</label><textarea id="setDoctors"></textarea></div>
     <div class="grp"><label>Therapists</label><textarea id="setTherapists"></textarea></div>
     <div class="grp"><label>Treatments</label><textarea id="setTreatments"></textarea></div>
-    <div class="grp"><label>Customers &amp; fixed doctor/therapist</label><textarea id="setCustomers" style="height:140px"></textarea></div>
   </div>
   <div class="mfoot"><button class="btn grey" onclick="closeModal('settingsModal')">Cancel</button><button class="btn" onclick="saveSettings()">Save lists</button></div>
 </div></div>
@@ -378,7 +385,7 @@
       <button onclick="pickRole('counter')">🖥 Counter PC <span class="hint">full board + admin</span></button>
       <button onclick="pickRole('consultant')">🧭 Consultant <span class="hint">full board, no admin</span></button>
       <button onclick="pickRole('doctor')">🩺 Doctor <span class="hint">my customers today</span></button>
-      <button onclick="pickRole('therapist')">💆 Therapist <span class="hint">my rooms &amp; next up</span></button>
+      <button onclick="pickRole('therapist')">💆🏼‍♀️ Therapist <span class="hint">my rooms &amp; next up</span></button>
     </div>
     <div id="roleNameWrap" style="display:none;margin-top:12px">
       <p class="hint" id="roleNameHint">Select your name:</p>
@@ -744,6 +751,7 @@ function theraModeRow(room,o){
   return `<div class="stagechips">${main}${others.map(([label,mode])=>`<button class="chip" onclick="openFocus('${jsq(room)}','${mode}')">${label}</button>`).join('')}</div>`;}
 function focusStartMask(room){oxyDoneToMask(room);theraFocus={room,mode:'mask'};render();}
 function focusNumbDone(room){numbDone(room);closeFocus();}
+function focusMaskDone(room){maskClear(room);closeFocus();}
 function renderFocusOverlay(){
   if(!theraFocus)return"";
   const {room,mode}=theraFocus;
@@ -767,31 +775,32 @@ function renderFocusOverlay(){
       body=`<div class="focusBig">Numb for</div><div class="focusPicks">`+
         [10,15,20].map(m=>`<button class="focusPill big" onclick="numbIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
         `<input class="focusInput" placeholder="e.g. 345" onchange="numbSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
-    }else{const d=toMin(o.numb)-curMin();
+    }else{const d=toMin(o.numb)-curMin();const done=d<0;
       needsCenter=true;
-      body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('Done '+(-d)+'m ago'):('till '+esc(hm12(o.numb))+' \u00b7 '+d+'m left')}</div>
-      <div class="focusRow">
+      body=`<div class="focusBig${done?' over':''}" id="focusBigTxt">${done?('Done '+(-d)+'m ago'):('till '+esc(hm12(o.numb))+' \u00b7 '+d+'m left')}</div>
+      <div class="focusRow" id="focusEditRow" style="${done?'display:none':''}">
         <button class="focusPill" onclick="numbBump('${jsq(room)}',-1)">\u2212 1m</button>
         <button class="focusPill" onclick="numbBump('${jsq(room)}',1)">+ 1m</button>
-        <button class="focusPill go" id="focusReadyBtn" style="${d<0?'':'display:none'}" onclick="focusNumbDone('${jsq(room)}')">\u2713 Ready</button>
       </div>
       <div class="focusRow" style="margin-top:16px">
-        <button class="focusPill" style="width:100%;padding:20px;font-size:20px" onclick="closeFocus()">\u2713 Done</button>
+        <button class="focusPill go" id="focusReadyBtn" style="width:100%;padding:20px;font-size:20px;${done?'':'display:none'}" onclick="focusNumbDone('${jsq(room)}')">\u2713 Ready</button>
+        <button class="focusPill" id="focusCloseBtn" style="width:100%;padding:20px;font-size:20px;${done?'display:none':''}" onclick="closeFocus()">\u2713 Done</button>
       </div>`;}
   }else if(mode==='mask'){
     if(!o.mask){
       body=`<div class="focusBig">Mask for</div><div class="focusPicks">`+
         [5,10,15].map(m=>`<button class="focusPill big" onclick="maskIn('${jsq(room)}',${m})">${m}m</button>`).join('')+
         `<input class="focusInput" placeholder="e.g. 345" onchange="maskSet('${jsq(room)}',parseTimeInput(this.value))"></div>`;
-    }else{const d=toMin(o.mask)-curMin();
+    }else{const d=toMin(o.mask)-curMin();const done=d<0;
       needsCenter=true;
-      body=`<div class="focusBig${d<0?' over':''}" id="focusBigTxt">${d<0?('overdue '+(-d)+'m'):('off '+esc(hm12(o.mask))+' \u00b7 in '+d+'m')}</div>
-      <div class="focusRow">
+      body=`<div class="focusBig${done?' over':''}" id="focusBigTxt">${done?('overdue '+(-d)+'m'):('off '+esc(hm12(o.mask))+' \u00b7 in '+d+'m')}</div>
+      <div class="focusRow" id="focusEditRow" style="${done?'display:none':''}">
         <button class="focusPill" onclick="maskBump('${jsq(room)}',-1)">\u2212 1m</button>
         <button class="focusPill" onclick="maskBump('${jsq(room)}',1)">+ 1m</button>
       </div>
       <div class="focusRow" style="margin-top:16px">
-        <button class="focusPill" style="width:100%;padding:20px;font-size:20px" onclick="closeFocus()">\u2713 Done</button>
+        <button class="focusPill go" id="focusReadyBtn" style="width:100%;padding:20px;font-size:20px;${done?'':'display:none'}" onclick="focusMaskDone('${jsq(room)}')">\u2713 Ready</button>
+        <button class="focusPill" id="focusCloseBtn" style="width:100%;padding:20px;font-size:20px;${done?'display:none':''}" onclick="closeFocus()">\u2713 Done</button>
       </div>`;}
   }
   return `<div class="focusOverlay"><div class="focusHead"><div><b>${esc(o.customer)}</b><span class="focusSub">${esc(room)}</span></div><button class="focusClose" onclick="closeFocus()">\u2715</button></div><div class="focusBody${needsCenter?' center':''}">${body}</div></div>`;}
@@ -896,9 +905,14 @@ function refreshTimers(){try{
     const o=state.occ[theraFocus.room];const el=$("focusBigTxt");
     if(o&&el){
       if(theraFocus.mode==='oxy'){const p=oxyPos(o);el.textContent=(p&&!p.fin)?("~"+fmtRem(p.remS)+" left"):"Steps done";}
-      else if(theraFocus.mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();el.textContent=d<0?("Done "+(-d)+"m ago"):("till "+hm12(o.numb)+" \u00b7 "+d+"m left");el.classList.toggle('over',d<0);
-        const rb=$("focusReadyBtn");if(rb)rb.style.display=d<0?'':'none';}
-      else if(theraFocus.mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();el.textContent=d<0?("overdue "+(-d)+"m"):("off "+hm12(o.mask)+" \u00b7 in "+d+"m");el.classList.toggle('over',d<0);}
+      else if(theraFocus.mode==='numb'&&o.numb){const d=toMin(o.numb)-curMin();const done=d<0;el.textContent=done?("Done "+(-d)+"m ago"):("till "+hm12(o.numb)+" \u00b7 "+d+"m left");el.classList.toggle('over',done);
+        const rb=$("focusReadyBtn");if(rb)rb.style.display=done?'':'none';
+        const cb=$("focusCloseBtn");if(cb)cb.style.display=done?'none':'';
+        const er=$("focusEditRow");if(er)er.style.display=done?'none':'';}
+      else if(theraFocus.mode==='mask'&&o.mask){const d=toMin(o.mask)-curMin();const done=d<0;el.textContent=done?("overdue "+(-d)+"m"):("off "+hm12(o.mask)+" \u00b7 in "+d+"m");el.classList.toggle('over',done);
+        const rb=$("focusReadyBtn");if(rb)rb.style.display=done?'':'none';
+        const cb=$("focusCloseBtn");if(cb)cb.style.display=done?'none':'';
+        const er=$("focusEditRow");if(er)er.style.display=done?'none':'';}
     }
   }
   }catch(e){}}
@@ -925,7 +939,9 @@ function docInline(id,doc){return editingDocId===id?`<select id="activeEdit" onb
 
 function usePhoneUI(){return ROLE==='doctor'||ROLE==='therapist'||(ROLE==='consultant'&&window.innerWidth<=820);}
 function syncMainVis(){const ph=usePhoneUI();$("boardMain").style.display=ph?"none":"";$("phoneMain").style.display=ph?"":"none";document.body.classList.toggle('phoneui',ph);}
+function updateDateStamp(){const _ds=$("dateStamp");if(!_ds)return;const _d=new Date(),_M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];_ds.textContent=(state.syncDate||(pad(_d.getDate())+"/"+_M[_d.getMonth()]+"/"+_d.getFullYear())).replace(/\//g,' ');}
 function render(){
+  updateDateStamp();
   if(!ROLE)return;
   const ae=document.activeElement;
   if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)&&ae.id)return; // don't wipe a field the person is actively typing in
@@ -941,7 +957,7 @@ function applyRoleChrome(){
   document.querySelectorAll(".adminOnly").forEach(el=>el.style.display=(board&&!ph)?"":"none");
   $("logoutBtnPhone").style.display=(ph&&cloudOn)?"":"none";
   const chip=$("roleChip");
-  if(ROLE){chip.style.display="";const icon={counter:"\ud83d\udda5",consultant:"\ud83e\udded",doctor:"\ud83e\ude7a",therapist:"\ud83d\udc86"}[ROLE]||"";
+  if(ROLE){chip.style.display="";const icon={counter:"\ud83d\udda5",consultant:"\ud83e\udded",doctor:"\ud83e\ude7a",therapist:"\ud83d\udc86\ud83c\udffc\u200d\u2640\ufe0f"}[ROLE]||"";
     chip.textContent=icon+" "+(MYNAME||ROLE)+" \u21c4";}
   else chip.style.display="none";
 }
@@ -1074,13 +1090,14 @@ function renderQueue(){
 function qCard(q){
   const open=expandedQ===q.id;
   const timeEl=editingTimeId===q.id?`<input id="activeEdit" class="timein" value="${esc(hm12(q.appt))}" placeholder="e.g. 345" onkeydown="if(event.key==='Enter')this.blur()" onblur="qSetAppt(${q.id},parseTimeInput(this.value))" style="width:92px">`:`<span class="qtime" title="click to edit time" style="cursor:pointer" onclick="editTime(${q.id})">${q.appt?esc(hm12(q.appt)):'\uff0b set time'}</span>`;
+  const docEl=editingDocId===q.id
+    ? `<select id="activeEdit" onblur="cancelEdit()" onchange="qSetDoctor(${q.id},this.value)" style="flex:1">${docOptions(q.doctor)}</select>`
+    : `<span>${esc(q.doctor)||'\u2014'}</span>${open?`<button class="docedit" title="change doctor" onclick="editDoc(${q.id})">\u270e</button><select class="theraSel" title="therapist" onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select>`:''}`;
   let h=`<div class="qitem compact"><div class="qtop2">
-      <div class="qleft">${timeEl}<span class="qname">${esc(q.customer)}</span><span class="qdoc">${esc(q.doctor)||'\u2014'}</span></div>
+      <div class="qleft">${timeEl}<span class="qname">${esc(q.customer)}</span><span class="qdoc">${docEl}</span></div>
       <div class="qright"><button class="chip" onclick="qCheckIn(${q.id})">\u2713 Arrived</button><button class="qmore" title="more" onclick="toggleQ(${q.id})">${open?'\u25b4 less':'\u22ef more'}</button></div>
     </div>`;
-  if(open){h+=`<div class="txwrap" style="margin-top:6px">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ treatment" onchange="qTxAdd(${q.id},this.value);this.value=''"></div>
-    <div class="qactions">${docInline(q.id,q.doctor)}<span style="flex:1"></span><button class="btn sm grey" title="Remove" onclick="removeQueue(${q.id})">\u2715</button></div>
-    <div class="qactions"><select onchange="qSetThera(${q.id},this.value)">${thOptions(q.therapist)}</select><select onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('Send to room \u25be')}</select></div>`;}
+  if(open){h+=`<div class="qexp"><div class="qrowB"><div class="txwrap" style="flex:1">${txChips(q.treatment,`qTxRemove(${q.id},`)}<input class="txin" list="txList" placeholder="+ treatment" onchange="qTxAdd(${q.id},this.value);this.value=''"></div><select class="sendSel" onchange="moveQueueToRoom(${q.id},this.value)">${sendRoomOpts('Send to room \u25be')}</select><button class="qx" title="Remove" onclick="removeQueue(${q.id})">\u2715</button></div></div>`;}
   return h+`</div>`;
 }
 
@@ -1292,12 +1309,11 @@ function copyStr(str){if(navigator.clipboard){navigator.clipboard.writeText(str)
 /* ===== settings (counter only) ===== */
 function openSettings(){if(!isCounter())return;const dn=state.groups.find(g=>g.name==="Downstairs")||state.groups[0];const up=state.groups.find(g=>g.name==="Upstairs")||state.groups[1]||{rooms:[]};
   $("setDown").value=dn.rooms.join("\n");$("setUp").value=up.rooms.join("\n");$("setDoctors").value=state.doctors.join("\n");$("setTherapists").value=state.therapists.join("\n");$("setTreatments").value=state.treatments.join("\n");
-  $("setCustomers").value=Object.entries(state.customers).map(([n,c])=>{let s=n;if(c.doctor||c.therapist)s+=" = "+(c.doctor||"");if(c.therapist)s+=" = "+c.therapist;return s;}).join("\n");$("settingsModal").classList.add("show");}
+  $("settingsModal").classList.add("show");}
 function saveSettings(){const lines=t=>t.value.split("\n").map(x=>x.trim()).filter(Boolean);
   const cleanRoom=x=>fbKey(x);
   const newGroups=[{name:"Downstairs",rooms:lines($("setDown")).map(cleanRoom)},{name:"Upstairs",rooms:lines($("setUp")).map(cleanRoom)}];
   state.doctors=lines($("setDoctors"));state.therapists=lines($("setTherapists"));state.treatments=lines($("setTreatments"));
-  const cust={};lines($("setCustomers")).forEach(l=>{const p=l.split("=").map(x=>x.trim());const nm=fbKey(p[0]);if(nm&&nm!=="_")cust[nm]={doctor:p[1]||"",therapist:p[2]||""};});state.customers=cust;
   const newRooms=newGroups.flatMap(g=>g.rooms);const occ={};newRooms.forEach(r=>occ[r]=state.occ[r]||null);
   const patch=listsPatch();
   allRooms().forEach(r=>{if(!newRooms.includes(r)&&state.occ[r]){const o=state.occ[r];const q={id:nextId(),customer:o.customer,doctor:o.doctor,therapist:o.therapist,treatment:txArr(o.treatment),appt:o.appt||"",arrivedAt:nowHM()};
@@ -1349,7 +1365,7 @@ function setRole(role,name){ROLE=role;MYNAME=name;pendingRole=null;
   toast(role==='counter'?"Counter PC mode":role==='consultant'?"Consultant mode":(name+" — "+role));}
 
 /* ===== cloud connect / auth / migration ===== */
-function setSync(t,cls){const e=$("syncst");if(e){e.textContent=t;e.className="syncst"+(cls?" "+cls:"");}}
+function setSync(t,cls){const e=$("syncst");if(e){e.textContent=t;e.className="syncst"+(cls?" "+cls:"");e.style.display=cls==='cloud'?'none':'';}}
 function connectCloud(){
   if(baseRef)return;db=firebase.database();baseRef=db.ref(BASE_PATH);cloudOn=true;
   baseRef.once('value').then(s=>{
@@ -1368,6 +1384,7 @@ function attachListeners(){
   baseRef.child('queue').on('value',s=>applyQueue(s.val()));
   baseRef.child('completed').on('value',s=>applyRecs('completed',s.val()));
   baseRef.child('removed').on('value',s=>applyRecs('removed',s.val()));
+  baseRef.child('syncDate').on('value',s=>{state.syncDate=s.val()||'';updateDateStamp();});
   setTimeout(()=>{notifReady=true;},2500);
 }
 function doLogin(){let u=$("loginEmail").value.trim();const p=$("loginPwd").value;if(!u||!p){$("loginErr").textContent="Enter username and password.";return;}
