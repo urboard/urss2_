@@ -116,6 +116,11 @@ function toV1Item(appt, idNum) {
 // ---- Main ------------------------------------------------------------------
 
 async function main() {
+  console.log("========================================================");
+  console.log("== sync.js BUILD: DIAGNOSTIC-READONLY-v3 (writes NOTHING) ==");
+  console.log("== If you do NOT see this line, the repo still has the  ==");
+  console.log("== old sync.js — replace it with this file and re-run.  ==");
+  console.log("========================================================");
   const token = process.env.CRM_TOKEN;
   if (!token) throw new Error("CRM_TOKEN environment variable is not set");
 
