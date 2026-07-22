@@ -234,6 +234,13 @@ async function main() {
   }
   // ===================== END TEMPORARY DIAGNOSTIC =====================
 
+  // READ-ONLY diagnostic build: stop here, before clearing or writing ANY
+  // board. This lets you run the Action safely during clinic hours just to
+  // collect the log above. Remove this block (and the diagnostic above) for
+  // the real sync once the field mapping is confirmed.
+  console.log("DIAGNOSTIC BUILD — no board was cleared or written. Paste the CRM COLUMNS / distinct lines above to finalize.");
+  return;
+
   const kept = all.filter(
     (a) => !isDropped(a) && a.StartDate === targetDate
   );
