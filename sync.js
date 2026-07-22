@@ -46,34 +46,55 @@ function toHHMM(raw) {
   return s.slice(0, 2) + ":" + s.slice(2);
 }
 
-// Build a stable, collision-safe key so re-running the sync updates the same
-// entry instead of duplicating it, and won't collide with walk-ins added
-// manually on the board (those use numeric ids from Date.now()).
-function crmKey(appt) {
-  const safe = (v) => String(v || "").replace(/[.#$/\[\]]/g, "_");
-  return `crm-${safe(appt.customerID)}-${safe(appt.StartDate)}-${safe(appt.StartTime)}`;
+// Deterministic NUMERIC id derived from the appointment's identity, used as
+// BOTH the queue item's `id` and the Firebase key it's written under. Numeric
+// so v2 boards (which render `onclick="fn(${id})"` unquoted) stay valid JS,
+// and deterministic so re-running the sync updates the same entry instead of
+// duplicating it. djb2 -> 32-bit uint (max ~4.29e9), well below the ~1.7e15
+// ids the board hands to manual walk-ins, so the two never collide.
+function crmNumId(appt) {
+  const s = `${appt.customerID || ""}|${appt.StartDate || ""}|${appt.StartTime || ""}|${appt.ResourceName || ""}`;
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h;
 }
 
-// Statuses that mean "this appointment is not happening" — excluded from the
-// board. DELETED was the only one handled before, which is why CANCELLED rows
-// were still showing up.
-// TODO(confirm-with-CRM-sample): these are the expected spellings; verify the
-// exact Status strings your CRM emits (cancelled / no-show) and adjust.
-const DROP_STATUSES = new Set([
-  "DELETED", "CANCELLED", "CANCELED", "NOSHOW", "NO SHOW", "NO-SHOW",
-]);
-function isDropped(appt) {
+// ---- What counts as a doctor appointment ----------------------------------
+// From the CRM: Status is one of ACTIVE/CANCEL/CONFIRMED/DELETED/DONE/
+// NEWSHOWUP/SHOWUP; customerType is CUSTOMER/FOLLOWUPLIST/REMARKS; the doctor
+// columns are the ResourceName values starting with "DR" (everything else —
+// TR-OXY, TR-SRW, CANCEL 1/2/3, WR-WAITING LIST, PROLIGHT, N/A, TEST — is not
+// a doctor). Per request the board shows DOCTOR appointments only.
+const DROP_STATUSES = new Set(["CANCEL", "DELETED"]); // cancelled / deleted
+function isCancelled(appt) {
   return DROP_STATUSES.has(String(appt.Status || "").toUpperCase().trim());
 }
+function isDoctorResource(appt) {
+  return /^\s*DR\b|^\s*DR[-\s]/i.test(String(appt.ResourceName || ""));
+}
+function isRealCustomer(appt) {
+  return String(appt.customerType || "").toUpperCase().trim() === "CUSTOMER";
+}
+// A row we actually put on a board: a real customer's doctor appointment that
+// isn't cancelled or deleted.
+function isKeeper(appt) {
+  return isRealCustomer(appt) && isDoctorResource(appt) && !isCancelled(appt);
+}
 
-// Pull the doctor name. Some rows come through blank because the doctor isn't
-// always in ResourceName, or doesn't start with "DR".
-// TODO(confirm-with-CRM-sample): confirm which column actually holds the
-// doctor (ResourceName? DoctorName? StaffName?) and set it here — this is the
-// second half of the "appointments without doctor names" fix.
-function pickDoctor(appt) {
-  const r = appt.ResourceName || "";
-  return /^\s*DR/i.test(r) ? r.trim() : "";
+// Turn the CRM resource label into a tidy doctor name:
+//   "DR- CHERYL"        -> "Dr Cheryl"
+//   "DR- EVE / DR NG"   -> "Dr Eve / Dr Ng"
+//   "DR TAN SH"         -> "Dr Tan Sh"
+function cleanDoctor(appt) {
+  let r = String(appt.ResourceName || "").trim();
+  if (!r) return "";
+  return r
+    .replace(/-/g, " ")                                   // "DR- CHERYL" -> "DR  CHERYL"
+    .replace(/\s{2,}/g, " ")                              // collapse spaces
+    .replace(/\bDR\b/gi, "Dr")                            // "DR" -> "Dr"
+    .replace(/\b([A-Za-z])([A-Za-z]*)\b/g, (m, a, b) => a.toUpperCase() + b.toLowerCase()) // Title Case
+    .replace(/\bDr\b/g, "Dr")                             // keep "Dr" exactly
+    .trim();
 }
 
 // Per request, the board only pulls four fields: appointment DATE, TIME,
@@ -83,28 +104,27 @@ function pickDoctor(appt) {
 // Firebase key it's written under, so actions write back to the same node.
 function toV2Item(appt) {
   return {
-    id: crmKey(appt), // MUST match the Firebase key this is written under (see main())
-    source: "crm",    // lets the board's reset spare synced appointments
+    id: crmNumId(appt), // equals the Firebase key this is written under (see main())
+    source: "crm",      // lets the board's reset spare synced appointments
     customer: appt.CustomerName || "",
-    doctor: pickDoctor(appt),
+    doctor: cleanDoctor(appt),
     therapist: "",
     treatment: [],
     appt: toHHMM(appt.StartTime),
-    apptDate: appt.StartDate || "", // item 4: the date this appointment is for
+    apptDate: appt.StartDate || "", // the date this appointment is for
     arrivedAt: "",
     consult: false,
     consultant: "",
   };
 }
 
-// v1 boards (RU, MA, SU, BM) read a single stringified JSON blob and render
-// `onclick="fn(${id})"` UNQUOTED — so their ids must be NUMBERS, not the
-// "crm-..." string key, or every button on a synced card is invalid JS.
-function toV1Item(appt, idNum) {
+// v1 boards (GL is v2; RU/MA/SU/BM are v1) read a single stringified JSON blob
+// and render `onclick="fn(${id})"` UNQUOTED — numeric ids keep that valid.
+function toV1Item(appt) {
   return {
-    id: idNum,
+    id: crmNumId(appt),
     customer: appt.CustomerName || "",
-    doctor: pickDoctor(appt),
+    doctor: cleanDoctor(appt),
     therapist: "",
     treatment: [],
     appt: toHHMM(appt.StartTime),
@@ -116,11 +136,6 @@ function toV1Item(appt, idNum) {
 // ---- Main ------------------------------------------------------------------
 
 async function main() {
-  console.log("========================================================");
-  console.log("== sync.js BUILD: DIAGNOSTIC-READONLY-v3 (writes NOTHING) ==");
-  console.log("== If you do NOT see this line, the repo still has the  ==");
-  console.log("== old sync.js — replace it with this file and re-run.  ==");
-  console.log("========================================================");
   const token = process.env.CRM_TOKEN;
   if (!token) throw new Error("CRM_TOKEN environment variable is not set");
 
@@ -225,54 +240,10 @@ async function main() {
   }
   console.log(`Filtering for StartDate = ${targetDate}`);
 
-  // ======================= TEMPORARY DIAGNOSTIC =======================
-  // Prints the real CRM column names, and the distinct values of every
-  // LOW-cardinality column (Status, Branch, Resource, etc.). High-cardinality
-  // columns like customer name / phone are skipped, so no personal data is
-  // logged. Paste the "CRM COLUMNS" + "distinct" lines back to finalize the
-  // field mapping, then DELETE this whole block.
-  {
-    const keys = all.length ? Object.keys(all[0]) : [];
-    console.log("CRM COLUMNS:", JSON.stringify(keys));
-    console.log(`Parsed rows: ${all.length}`);
-    // Categorical columns that are safe to print in full — resource/status/
-    // branch codes, not personal data. If a CLEAN parse worked these are
-    // small; if any is still huge, columns are still misaligning.
-    const CATEGORICAL = ["customerType", "Status", "BranchID", "ResourceName"];
-    for (const k of CATEGORICAL) {
-      if (!keys.includes(k)) continue;
-      const vals = [...new Set(all.map((r) => (r[k] == null ? "" : String(r[k]).trim())))].sort();
-      const shown = vals.length <= 200 ? vals : vals.slice(0, 200);
-      console.log(`  ${k}: ${vals.length} distinct${vals.length > 200 ? " (first 200)" : ""} => ${JSON.stringify(shown)}`);
-    }
-    // What real rows for the target date look like (customer name masked, so no
-    // personal data is printed) — confirms which column holds the doctor and
-    // how a cancelled row is marked.
-    const mask = (s) => { s = String(s || ""); return s ? s[0] + "***" : ""; };
-    const onDate = all.filter((r) => r.StartDate === targetDate);
-    console.log(`Rows with StartDate=${targetDate}: ${onDate.length}`);
-    console.log("Sample rows for that date [CustomerName masked]:");
-    onDate.slice(0, 15).forEach((r, i) => {
-      console.log(`  #${i} ` + JSON.stringify({
-        ResourceName: r.ResourceName, Status: r.Status, BranchID: r.BranchID,
-        StartTime: r.StartTime, EndTime: r.EndTime, customerType: r.customerType,
-        CustomerName: mask(r.CustomerName),
-      }));
-    });
-  }
-  // ===================== END TEMPORARY DIAGNOSTIC =====================
-
-  // READ-ONLY diagnostic build: stop here, before clearing or writing ANY
-  // board. This lets you run the Action safely during clinic hours just to
-  // collect the log above. Remove this block (and the diagnostic above) for
-  // the real sync once the field mapping is confirmed.
-  console.log("DIAGNOSTIC BUILD — no board was cleared or written. Paste the CRM COLUMNS / distinct lines above to finalize.");
-  return;
-
-  const kept = all.filter(
-    (a) => !isDropped(a) && a.StartDate === targetDate
-  );
-  console.log(`${all.length} total rows -> ${kept.length} after filtering`);
+  // Keep only real customers' doctor appointments for the target date that
+  // aren't cancelled/deleted (see isKeeper).
+  const kept = all.filter((a) => a.StartDate === targetDate && isKeeper(a));
+  console.log(`${all.length} total rows -> ${kept.length} doctor appointment(s) for ${targetDate}`);
 
   if (kept.length === 0) {
     // Zero matches is suspicious given a real appointment for this exact
@@ -327,12 +298,12 @@ async function main() {
         queue: null,
         completed: null,
         removed: null,
-        syncDate: targetDate, // item 4: board shows "Appointments for <date>"
+        syncDate: targetDate, // date stamp shown in the board header
       });
       console.log(`${code}: cleared rooms/queue/completed/removed (v2)`);
 
       const updates = {};
-      for (const appt of appts) updates[crmKey(appt)] = toV2Item(appt);
+      for (const appt of appts) updates[crmNumId(appt)] = toV2Item(appt);
       if (Object.keys(updates).length) {
         await app.database().ref("board_v2/queue").update(updates);
         console.log(`${code}: wrote ${Object.keys(updates).length} appointment(s)`);
@@ -366,10 +337,10 @@ async function main() {
         (g.rooms || []).forEach((r) => { occ[r] = null; })
       );
 
-      // Numeric ids from a high base so they never collide with the small
-      // sequential ids the board hands to manually-added walk-ins.
-      const ID_BASE = 1000000000000;
-      const queueArr = appts.map((appt, i) => toV1Item(appt, ID_BASE + i));
+      // Deterministic numeric ids (crmNumId) — safe to render unquoted, and
+      // never collide with the ~1.7e15 ids the board gives manual walk-ins.
+      const queueArr = appts.map((appt) => toV1Item(appt));
+      const maxCrmId = queueArr.reduce((m, q) => Math.max(m, q.id || 0), 0);
 
       const newState = {
         ...existing,
@@ -377,8 +348,8 @@ async function main() {
         queue: queueArr,
         completed: [],
         removed: [],
-        syncDate: targetDate, // item 4
-        seq: Math.max(existing.seq || 1, ID_BASE + appts.length + 1),
+        syncDate: targetDate, // date stamp shown in the board header
+        seq: Math.max(existing.seq || 1, maxCrmId + 1),
       };
 
       await app.database().ref("board").set(JSON.stringify(newState)); // MUST be a string
