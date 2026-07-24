@@ -27,12 +27,28 @@ const BRANCHES = {
 
 // CRM gives "18/Jul/2025" (DD/Mon/YYYY). Build the same string for "tomorrow"
 // so we can filter StartDate against it directly, no date-library needed.
+//
+// This is meant to fire once, in the evening, to prep the NEXT calendar day's
+// board. GitHub's free scheduled Actions are best-effort and can be delayed by
+// minutes to hours (documented platform behavior, not something this script
+// controls) — including delays severe enough to slip past midnight. A naive
+// "always add 1 day" breaks in that case: a run intended for 10pm on the 23rd
+// that actually fires at 00:02 on the 24th would compute 24th+1=25th, skipping
+// a day the board never got synced for.
+//
+// Fix: only add a day if the run is genuinely happening in the evening (its
+// own job, prepping the day ahead). A run landing in the early hours through
+// midday is treated as a late-arriving version of LAST night's job instead —
+// same target day, no extra day added. Noon is a deliberately generous cutover:
+// the job is scheduled for 10:13pm, so anything from just-after-midnight up to
+// noon is unambiguously "the previous evening's delayed run," not a fresh one.
 function tomorrowCrmDateString() {
   const now = new Date();
-  // Shift to Malaysia time (UTC+8) before adding a day, so the "tomorrow"
-  // boundary lines up with the clinic's actual calendar day, not UTC's.
+  // Shift to Malaysia time (UTC+8) so both the hour check and the calendar
+  // day line up with the clinic's actual wall clock, not UTC's.
   const myt = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  myt.setUTCDate(myt.getUTCDate() + 1);
+  const isEveningRun = myt.getUTCHours() >= 12; // MYT hour, thanks to the shift above
+  if (isEveningRun) myt.setUTCDate(myt.getUTCDate() + 1);
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const dd = String(myt.getUTCDate()).padStart(2, "0");
   const mon = months[myt.getUTCMonth()];
